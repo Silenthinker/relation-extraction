@@ -116,14 +116,16 @@ if os.path.isfile(args.load_checkpoint):
 	start_epoch = checkpoint_file['epoch']
 	model.load_state_dict(checkpoint_file['state_dict'])
 	optimizer.load_state_dict(checkpoint_file['optimizer'])
-	dev_prec, dev_rec, dev_f1 = evaluate(model, val_loader, cuda=args.cuda)
-	test_prec, test_rec, test_f1 = evaluate(model, test_loader, cuda=args.cuda)
-	print('checkpoint dev_f1: {:.4f}, test_f1: {:.4f}'.format(dev_f1, test_f1))
 else:
 	print('no checkpoint file found: {}, train from scratch...'.format(args.load_checkpoint))
 
 if args.cuda:
 	model.cuda()
+
+if os.path.isfile(args.load_checkpoint):
+	dev_prec, dev_rec, dev_f1 = evaluate(model, val_loader, cuda=args.cuda)
+	test_prec, test_rec, test_f1 = evaluate(model, test_loader, cuda=args.cuda)
+	print('checkpoint dev_f1: {:.4f}, test_f1: {:.4f}'.format(dev_f1, test_f1))
 
 track_list = []
 best_f1 = float('-inf')
