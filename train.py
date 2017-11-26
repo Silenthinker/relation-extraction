@@ -116,8 +116,8 @@ if os.path.isfile(args.load_checkpoint):
 	start_epoch = checkpoint_file['epoch']
 	model.load_state_dict(checkpoint_file['state_dict'])
 	optimizer.load_state_dict(checkpoint_file['optimizer'])
-	dev_prec, dev_rec, dev_f1 = evaluate(model, val_loader)
-	test_prec, test_rec, test_f1 = evaluate(model, test_loader)
+	dev_prec, dev_rec, dev_f1 = evaluate(model, val_loader, cuda=args.cuda)
+	test_prec, test_rec, test_f1 = evaluate(model, test_loader, cuda=args.cuda)
 	print('checkpoint dev_f1: {:.4f}, test_f1: {:.4f}'.format(dev_f1, test_f1))
 else:
 	print('no checkpoint file found: {}, train from scratch...'.format(args.load_checkpoint))
@@ -152,12 +152,12 @@ for epoch in range(start_epoch, num_epoch):
 	utils.adjust_learning_rate(optimizer, args.lr / (1 + (start_epoch + 1) * args.lr_decay))
 	epoch_loss /= tot_length
 	
-	dev_prec, dev_rec, dev_f1 = evaluate(model, val_loader)
+	dev_prec, dev_rec, dev_f1 = evaluate(model, val_loader, cuda=args.cuda)
 	if dev_f1 > best_f1:
 		patience_count = 0
 		best_f1 = dev_f1
 
-		test_prec, test_rec, test_f1 = evaluate(model, test_loader)
+		test_prec, test_rec, test_f1 = evaluate(model, test_loader, cuda=args.cuda)
 
 		track_list.append({'loss': epoch_loss, 'dev_f1': dev_f1, 'test_f1': test_f1})
 		print('epoch: {}, loss: {:.4f}, dev_f1: {:.4f}, test_f1: {:.4f}\tsaving...'.format(epoch, epoch_loss, dev_f1, test_f1))
