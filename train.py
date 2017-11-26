@@ -125,7 +125,8 @@ if args.cuda:
 if os.path.isfile(args.load_checkpoint):
 	dev_prec, dev_rec, dev_f1 = evaluate(model, val_loader, cuda=args.cuda)
 	test_prec, test_rec, test_f1 = evaluate(model, test_loader, cuda=args.cuda)
-	print('checkpoint dev_f1: {:.4f}, test_f1: {:.4f}'.format(dev_f1, test_f1))
+	print('checkpoint dev_prec: {:.4f}, dev_rec: {:.4f}, dev_f1: {:.4f}, test_prec: {:.4f}, test_rec: {:.4f}, test_f1: {:.4f}'.format(
+		dev_prec, dev_rec, dev_f1, test_prec, test_rec, test_f1))
 
 track_list = []
 best_f1 = float('-inf')
@@ -161,7 +162,9 @@ for epoch in range(start_epoch, num_epoch):
 
 		test_prec, test_rec, test_f1 = evaluate(model, test_loader, cuda=args.cuda)
 
-		track_list.append({'loss': epoch_loss, 'dev_f1': dev_f1, 'test_f1': test_f1})
+		track_list.append({'epoch': epoch, 'loss': epoch_loss, 
+			'dev_prec': dev_prec, 'dev_rec': dev_rec, 'dev_f1': dev_f1, 
+			'test_prec': test_prec, 'test_rec': test_rec, 'test_f1': test_f1})
 		print('epoch: {}, loss: {:.4f}, dev_f1: {:.4f}, test_f1: {:.4f}\tsaving...'.format(epoch, epoch_loss, dev_f1, test_f1))
 
 		try:
@@ -176,14 +179,13 @@ for epoch in range(start_epoch, num_epoch):
 			print(inst)
 	else:
 		patience_count += 1
-		track_list.append({'loss': epoch_loss, 'dev_f1': dev_f1})
+		track_list.append({'epoch': epoch,'loss': epoch_loss, 'dev_prec': dev_prec, 'dev_rec': dev_rec, 'dev_f1': dev_f1})
 		print('epoch: {}, loss: {:.4f}, dev_f1: {:.4f}'.format(epoch, epoch_loss, dev_f1))
 
 	print('epoch: {} in {} take: {} s'.format(epoch, args.num_epoch, time.time() - start_time))
 	if patience_count >= args.patience:
 		break
 
-print('epoch: {}, loss: {:.4f}, dev_f1: {:.4f}, test_f1: {:.4f}'.format(epoch, epoch_loss, dev_f1, test_f1))
 
 """ 
 TODO: 
