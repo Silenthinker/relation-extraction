@@ -124,7 +124,6 @@ else:
 
 if args.cuda:
 	model.cuda()
-	optimizer.cuda()
 
 track_list = []
 best_f1 = float('-inf')
