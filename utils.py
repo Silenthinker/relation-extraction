@@ -362,7 +362,7 @@ def build_parser():
 	parser.add_argument('--load_checkpoint', default='./checkpoint/re_lstm.model', help='path to load checkpoint')
 
 	# preprocess
-	parser.add_argument('--train_size', default=0.8, help='split train corpus into train/val set according to the ratio')
+	parser.add_argument('--train_size', type=float, default=0.8, help='split train corpus into train/val set according to the ratio')
 	parser.add_argument('--caseless', action='store_true', help='caseless or not')
 
 	# model
@@ -372,10 +372,10 @@ def build_parser():
 	parser.add_argument('--dropout_ratio', type=float, default=0.4, help='dropout ratio')
 
 	# training
-	parser.add_argument('--lr', default=0.01, help='learning rate')
+	parser.add_argument('--lr', type=float, default=0.01, help='learning rate')
 	parser.add_argument('--lr_decay', type=float, default=0.001, help='decay ratio of learning rate')
-	parser.add_argument('--momentum', default=0.9, help='momentum for sgd')
-	parser.add_argument('--clip_grad_norm', default=0.5, help='clip gradient norm')
+	parser.add_argument('--momentum', type=float, default=0.9, help='momentum for sgd')
+	parser.add_argument('--clip_grad_norm', type=float, default=0.5, help='clip gradient norm')
 	parser.add_argument('--batch_size', type=int, default=128, help='batch size')
 	parser.add_argument('--num_epoch', type=int, default=200, help='number of epochs')
 	parser.add_argument('--patience', type=int, default=15, help='patience for early stop')
