@@ -178,6 +178,8 @@ for epoch in range(start_epoch, num_epoch):
                         'epoch': epoch,
                         'state_dict': model.state_dict(),
                         'optimizer': optimizer.state_dict(),
+                        'f_map': feature_mapping,
+                        't_map': target_mapping,
                     }, {'track_list': track_list,
                         'args': vars(args)
                         }, args.checkpoint + '_lstm')
@@ -192,8 +194,4 @@ for epoch in range(start_epoch, num_epoch):
     if patience_count >= args.patience:
         break
 
-
-""" 
-TODO: 
-* load embedding
-"""
+## TODO: better separation and reusability
