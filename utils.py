@@ -13,7 +13,7 @@ import torch.nn as nn
 import torch.nn.init
 
 from itertools import chain
-from collections import Counter
+from collections import Counter, namedtuple
 from operator import itemgetter
 
 import nltk
@@ -38,6 +38,9 @@ from data import REDataset
 
 ## TODO: tokenization and remove punctuations which are not part of entity mentions
 
+# p1, p2 are relative positions w.r.t. two drug entity mentions
+SingleLine = namedtuple('SingleLine', 'sent_id pair_id e1 e2 ddi type sent p1 p2')
+
 class Word:
     def __init__(self, index, text, etype):
         self.index = index
@@ -61,6 +64,13 @@ def parse_charoffset(charoffset):
     # try split by ';'
     charoffsets = charoffset.split(';')
     return [[int(x.strip()) for x in offset.split('-')] for offset in charoffsets]
+    """
+    if ';' in charoffset:
+        print('Invalid char offset: {}'.format(charoffset))
+        return []
+    else:
+        return [int(x.strip()) for x in charoffset.split('-')]
+    """
     
 def parse_sentence(sent):
     """
@@ -92,34 +102,33 @@ def tag_word(words, charOffset, eid):
         entity: dict has keys charOffset, type, text
     Tag Word with entity type in-place
     Example:
-        words = [(0, 'it(', O), (4, 'is', O), (7, 'it', O)]
-        entity = {'charOffset': [0, 2], 'type': 'eng'} # [inclusive, exclusive]
+        words = [(0, 'it(', 'O'), (4, 'is', 'O'), (7, 'it', 'O')]
+        entity = {'charOffset': [0, 1], 'type': 'eng'} # [inclusive, exclusive]
         print(tag_word(words, entity))
         
-        [(0, 'it', 'B-ENG'), (3, (, 'O'), (4, 'is', 'O'), (7, 'it', 'O')]
+        [(0, 'it', 'B-ENG'), (2, (, 'O'), (4, 'is', 'O'), (7, 'it', 'O')]
     """
     beg, end = charOffset
     end += 1
-    origword = None
-    orig_i = None
+    res = []
     for i, word in enumerate(words):
-        if word.index >= beg and word.index < end: # coarse tagging
-            if word.index + len(word.text) - 1 >= end:
-                origword = word
-                orig_i = i
-            word.etype = eid
-    # fine tagging
-    # if end index of word is larger than end index of charOffset, such as the case of example
-    # split the word into two words, and tag the latter O
-    if origword is None:
-        return
-    origtext = origword.text 
-    origword.text = origtext[:end - origword.index] # update text
-    nextindex = origword.index + len(origword.text)
-    nextword = Word(nextindex, origtext[len(origword.text)], 'null')
-    words.insert(orig_i + 1, nextword)
+        if word.index < end and word.index + len(word.text) - 1 >= beg:
+            # if there is overlap between char offset and this word
+            # tag word
+            len_word = len(word.text)
+            if word.index < beg:
+                head = Word(word.index, word.text[:beg-word.index], 'null')
+                res.append(head)
+            mention = Word(beg, word.text[beg-word.index:min(len_word, end-word.index)], eid)
+            res.append(mention)
+            if word.index + len_word > end:
+                tail = Word(end, word.text[end-word.index:len_word], 'null')
+                res.append(tail)
+        else:
+            res.append(word)
+    return res
 
-def generate_sentences_per_doc(root, tokenize=True):
+def generate_sentences_per_doc(root, position=False):
     """
     Args:
         root: root Element of XML
@@ -127,20 +136,32 @@ def generate_sentences_per_doc(root, tokenize=True):
     for sent_elem in root.findall('sentence'):
         eids = []
         words = parse_sentence(sent_elem.get('text'))
+        # tag words with entity id
         for entity in sent_elem.findall('entity'):
             attributes = entity.attrib
             eids.append(attributes['id'])
-            parsed_charoffsets = parse_charoffset(attributes['charOffset'])
-            for parsed_charoffset in parsed_charoffsets:
-                tag_word(words, parsed_charoffset, attributes['id'])
+            charOffset = attributes['charOffset']
+            parsed_charoffsets = parse_charoffset(charOffset)
+            # in some cases, charOffset is in form of xx-xx;xx-xx, we simply take the first part
+            words = tag_word(words, parsed_charoffsets[0], attributes['id'])
+            if len(parsed_charoffsets) > 1:
+                segment = []
+                for charoffset in parsed_charoffsets:
+                    segment.append(sent_elem.get('text')[charoffset[0]:charoffset[1]+1])
+                print('---------------------')
+                print(sent_elem.get('text'))
+                print(' '.join(segment))
+        
+        # replace mention with id        
         sent = []
         for word in words:
             if word.etype == 'null':
                 sent.append(word.text)
-            elif sent and word.etype != sent[-1]: # replace consecutive terms into a single one
+            elif not sent or word.etype != sent[-1]: # replace consecutive terms into a single one
                 sent.append(word.etype)
         sent = ' '.join(sent)
 
+        # for each pair of mentions, generate a sentence
         for pair in sent_elem.findall('pair'):
             sent_blind = sent
             attributes = pair.attrib
@@ -161,21 +182,43 @@ def generate_sentences_per_doc(root, tokenize=True):
                     new = 'DRUG0'
                 sent_blind = sent_blind.replace(eid, new, 1)
             # tokenize
-            if tokenize:
-                sent_blind = nltk.word_tokenize(sent_blind)
-            yield (sent_elem.get('id'), attributes['id'], e1, e2, attributes['ddi'], etype, sent_blind)
+            sent_blind = nltk.word_tokenize(sent_blind)
+            # ensure there is a pair of mentions
+            if 'DRUG1' not in sent_blind or 'DRUG2' not in sent_blind:
+                continue
+            p1 = ''
+            p2 = ''
+            if position:
+                try:
+                    _p1 = sent_blind.index('DRUG1')
+                    _p2 = sent_blind.index('DRUG2')
+                except:
+                    print(sent)
+                    print(words)
+                    print(e1, e2)
+                    raise ValueError
+                len_sent = len(sent_blind)
+                p1 = [i - _p1 for i in range(0, len_sent)]
+                p2 = [i - _p2 for i in range(0, len_sent)]
+            yield SingleLine(sent_elem.get('id'), attributes['id'], e1, e2, attributes['ddi'], etype, sent_blind, p1, p2)
 
-def preprocess_ddi(data_path='../../data/drugddi2013/re/train', output_path='../../data/drugddi2013/re/train.ddi'):
+def preprocess_ddi(data_path='../../data/drugddi2013/re/train', output_path='../../data/drugddi2013/re/train.ddi', position=False):
     """
     Preprocess ddi data as follows:
     For each document
         For each sentence in the document
             For each pair in the sentence
-                Construct the following line: sent_id|pair_id|e1|e2|ddi|type|sent
+                Construct the following line: sent_id|pair_id|e1|e2|ddi|type|sent|p1|p2
 
     Return:
         res: list of tuples
     """
+    def encode_int_list(l):
+        """
+        encode integer list to string with space as delimiter
+        """
+        return ' '.join([str(i) for i in l])
+    
     res = []
     file_pattern = os.path.join(data_path, '*.xml')
     with open(output_path, 'w') as fo:
@@ -184,11 +227,11 @@ def preprocess_ddi(data_path='../../data/drugddi2013/re/train', output_path='../
             # import xml data into ElementTree
             tree = ET.parse(f)
             root = tree.getroot()
-            for sent in generate_sentences_per_doc(root):
-                res.append(sent)
-                sent = list(sent)
-                sent[-1] = ' '.join(sent[-1])
-                fo.write('|'.join(sent))
+            for single_line in generate_sentences_per_doc(root, position=position):
+                res.append(single_line)
+                sent = single_line.sent
+                single_line = single_line._replace(sent=' '.join(sent), p1=encode_int_list(single_line.p1), p2=encode_int_list(single_line.p2))
+                fo.write('|'.join(single_line))
                 fo.write('\n')
     print('Done')
     return res
@@ -286,7 +329,7 @@ def calc_threshold_mean(features):
     max_len = None if max_len == upper_average else max_len
     return [line_len for line_len in [lower_average, average, upper_average, max_len] if line_len]
 
-def construct_bucket_dataloader(input_features, input_targets, pad_feature, caseless, batch_size, is_train=True):
+def construct_bucket_dataloader(input_features, input_targets, pad_feature, batch_size, is_train=True):
     """
     Construct bucket
     """
@@ -381,10 +424,12 @@ def build_parser():
     parser.add_argument('--checkpoint', default='./checkpoint/re', help='path to checkpoint prefix')
     parser.add_argument('--load_checkpoint', default='', help='path to load checkpoint')
     parser.add_argument('--emb_file', default='', help='path to load pretrained word embedding')
+    parser.add_argument('--predict_file', default='../../data/drugddi2013/re/task9.2_GROUP_1.txt', help='path to output predicted result')
 
     # preprocess
     parser.add_argument('--train_size', type=float, default=0.8, help='split train corpus into train/val set according to the ratio')
     parser.add_argument('--caseless', action='store_true', help='caseless or not')
+    parser.add_argument('--position', action='store_true', help='use position feature')
 
     # model
     parser.add_argument('--embedding_dim', type=int, default=100, help='embedding dimension')
@@ -410,11 +455,17 @@ def load_corpus(train_path, test_path):
     """
     load ddi corpus
     """
+    def decode_int_string(l):
+        """
+        decode string into interger list
+        """
+        return [int(c) for c in l.split()]
     def load_file(path):
         def parse_line(line):
             line = line.split('|')
-            line[-1] = line[-1].split()
-            return tuple(line)
+            single_line = SingleLine(*line)
+            single_line = single_line._replace(sent=single_line.sent.split(), p1=decode_int_string(single_line.p1), p2=decode_int_string(single_line.p2))            
+            return single_line
 
         corpus = None
         try:

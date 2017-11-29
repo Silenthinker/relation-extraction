@@ -43,10 +43,10 @@ start_epoch = 0
 
 train_raw_corpus, test_raw_corpus = utils.load_corpus(args.train_path, args.test_path)
 if not train_raw_corpus or not test_raw_corpus:
-    train_raw_corpus = utils.preprocess_ddi(data_path=args.train_corpus_path, output_path=args.train_path)
-    test_raw_corpus = utils.preprocess_ddi(data_path=args.test_corpus_path, output_path=args.test_path)
-train_corpus = [(line[-1], line[-2]) for line in train_raw_corpus]
-test_corpus = [(line[-1], line[-2]) for line in test_raw_corpus]
+    train_raw_corpus = utils.preprocess_ddi(data_path=args.train_corpus_path, output_path=args.train_path, position=args.position)
+    test_raw_corpus = utils.preprocess_ddi(data_path=args.test_corpus_path, output_path=args.test_path, position=args.position)
+train_corpus = [(line.sent, line.type) for line in train_raw_corpus]
+test_corpus = [(line.sent, line.type) for line in test_raw_corpus]
 
 caseless = args.caseless
 batch_size = args.batch_size
@@ -176,7 +176,7 @@ for epoch in range(start_epoch, num_epoch):
         try:
             utils.save_checkpoint({
                         'epoch': epoch,
-                        'state_dict': model.state_dict(),
+                        'state_dict': model.cpu().state_dict(),
                         'optimizer': optimizer.state_dict(),
                         'f_map': feature_mapping,
                         't_map': target_mapping,
@@ -194,4 +194,9 @@ for epoch in range(start_epoch, num_epoch):
     if patience_count >= args.patience:
         break
 
-## TODO: better separation and reusability
+
+## TODO: 
+# special charOffset ;
+# keep drug mentions
+# better separation and reusability
+
