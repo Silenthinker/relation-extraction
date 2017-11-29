@@ -21,7 +21,7 @@ import nltk
 import numpy as np
 from sklearn.utils import shuffle
 from sklearn.model_selection import StratifiedShuffleSplit
-from sklearn.metrics import precision_score, recall_score, f1_score
+from sklearn.metrics import precision_score, recall_score, f1_score, classification_report
 
 from data import REDataset
 
@@ -476,7 +476,7 @@ def load_corpus(train_path, test_path):
         return corpus    
     return load_file(train_path), load_file(test_path)
     
-def evaluate(y_true, y_pred, labels=None):
+def evaluate(y_true, y_pred, labels=None, target_names=None):
     """
     calculate (micro) precision, recall, and f1 score
     Args:
@@ -488,6 +488,7 @@ def evaluate(y_true, y_pred, labels=None):
     precision = _evaluate(precision_score)
     recall = _evaluate(recall_score)
     f1 = _evaluate(f1_score)
+    classification_report(y_true, y_pred, labels=labels, target_names=target_names)
     return precision, recall, f1
 
 def adjust_learning_rate(optimizer, lr):

@@ -16,7 +16,7 @@ import torch.optim as optim
 import utils
 from model.lstm import LSTM
 
-def evaluate(model, data_loader, cuda=False):
+def evaluate(model, data_loader, t_map, cuda=False):
     model.eval()
     y_true = []
     y_pred = []
@@ -27,12 +27,15 @@ def evaluate(model, data_loader, cuda=False):
         output, _ = model(feature)
         _, pred = torch.max(output.data, dim=1)
         if cuda:
-            pred = pred.cpu()
+            pred = pred.cpu() # cast back to cpu
         y_true.append(target.numpy().tolist())
         y_pred.append(pred.numpy().tolist())
     y_true = list(chain.from_iterable(y_true))
     y_pred = list(chain.from_iterable(y_pred))
-    prec, rec, f1 = utils.evaluate(y_true, y_pred, labels=range(1, 5))        
+    ivt_t_map = {v:k for k, v in t_map.items()}
+    labels = range(1, 5)
+    t_names = [ivt_t_map[l] for l in labels]
+    prec, rec, f1 = utils.evaluate(y_true, y_pred, labels=labels, target_names=t_names)        
 
     return prec, rec, f1
 
@@ -96,9 +99,9 @@ test_features, test_targets = utils.build_corpus(test_corpus, feature_mapping, t
 
 # train/val split
 train_features, train_targets, val_features, val_targets = utils.stratified_shuffle_split(input_features, input_targets, train_size=args.train_size)
-train_loader = utils.construct_bucket_dataloader(train_features, train_targets, feature_mapping['PAD'], caseless, batch_size, is_train=True)
-val_loader = utils.construct_bucket_dataloader(val_features, val_targets, feature_mapping['PAD'], caseless, batch_size, is_train=False)
-test_loader = utils.construct_bucket_dataloader(test_features, test_targets, feature_mapping['PAD'], caseless, batch_size, is_train=False)
+train_loader = utils.construct_bucket_dataloader(train_features, train_targets, feature_mapping['PAD'], batch_size, is_train=True)
+val_loader = utils.construct_bucket_dataloader(val_features, val_targets, feature_mapping['PAD'], batch_size, is_train=False)
+test_loader = utils.construct_bucket_dataloader(test_features, test_targets, feature_mapping['PAD'], batch_size, is_train=False)
 
 # build model
 vocab_size = len(feature_mapping)
@@ -113,9 +116,9 @@ optimizer = optim.SGD(model.parameters(), lr=lr, momentum=momentum)
 if os.path.isfile(args.load_checkpoint):
     print('Loading checkpoint file from {}...'.format(args.load_checkpoint))
     checkpoint_file = torch.load(args.load_checkpoint)
-    start_epoch = checkpoint_file['epoch']
+    start_epoch = checkpoint_file['epoch'] + 1
     model.load_state_dict(checkpoint_file['state_dict'])
-    optimizer.load_state_dict(checkpoint_file['optimizer'])
+#    optimizer.load_state_dict(checkpoint_file['optimizer'])
 else:
     print('no checkpoint file found: {}, train from scratch...'.format(args.load_checkpoint))
     if not args.rand_embedding:
@@ -127,10 +130,11 @@ else:
 
 if args.cuda:
     model.cuda()
+    criterion.cuda()
 
 if os.path.isfile(args.load_checkpoint):
-    dev_prec, dev_rec, dev_f1 = evaluate(model, val_loader, cuda=args.cuda)
-    test_prec, test_rec, test_f1 = evaluate(model, test_loader, cuda=args.cuda)
+    dev_prec, dev_rec, dev_f1 = evaluate(model, val_loader, target_mapping, cuda=args.cuda)
+    test_prec, test_rec, test_f1 = evaluate(model, test_loader, target_mapping, cuda=args.cuda)
     print('checkpoint dev_prec: {:.4f}, dev_rec: {:.4f}, dev_f1: {:.4f}, test_prec: {:.4f}, test_rec: {:.4f}, test_f1: {:.4f}'.format(
         dev_prec, dev_rec, dev_f1, test_prec, test_rec, test_f1))
 
@@ -161,12 +165,12 @@ for epoch in range(start_epoch, num_epoch):
     utils.adjust_learning_rate(optimizer, args.lr / (1 + (start_epoch + 1) * args.lr_decay))
     epoch_loss /= tot_length
     
-    dev_prec, dev_rec, dev_f1 = evaluate(model, val_loader, cuda=args.cuda)
+    dev_prec, dev_rec, dev_f1 = evaluate(model, val_loader, target_mapping, cuda=args.cuda)
     if dev_f1 > best_f1:
         patience_count = 0
         best_f1 = dev_f1
 
-        test_prec, test_rec, test_f1 = evaluate(model, test_loader, cuda=args.cuda)
+        test_prec, test_rec, test_f1 = evaluate(model, test_loader, target_mapping, cuda=args.cuda)
 
         track_list.append({'epoch': epoch, 'loss': epoch_loss, 
             'dev_prec': dev_prec, 'dev_rec': dev_rec, 'dev_f1': dev_f1, 
