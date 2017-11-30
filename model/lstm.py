@@ -21,14 +21,22 @@ class LSTM(nn.Module):
     def __init__(self, vocab_size, tagset_size, args):
         super(LSTM, self).__init__()
         self.embedding_dim = args.embedding_dim
+        
+        self.position = args.position
+        self.position_dim = args.position_dim if args.position else 0
+        self.position_size = 2*args.position_bound + 1 # [-position_bound, position_bound]
+        self.position_bound = args.position_bound
+        
         self.hidden_dim = args.hidden_dim
         self.vocab_size = vocab_size
         self.tagset_size = tagset_size
         self.rnn_layers = args.rnn_layers
         self.dropout_ratio = args.dropout_ratio
 
-        self.word_embeds = nn.Embedding(vocab_size, self.embedding_dim)
-        self.lstm = nn.LSTM(self.embedding_dim, self.hidden_dim // 2,
+        self.word_embeds = nn.Embedding(self.vocab_size, self.embedding_dim)
+        if args.position:
+            self.position_embeds = nn.Embedding(self.position_size, self.position_dim)
+        self.lstm = nn.LSTM(self.embedding_dim + 2*self.position_dim, self.hidden_dim // 2,
                             num_layers=self.rnn_layers, bidirectional=True, 
                             dropout=self.dropout_ratio, batch_first=True)
         self.dropout1 = nn.Dropout(p=self.dropout_ratio)
@@ -47,19 +55,23 @@ class LSTM(nn.Module):
 
     def rand_init_embedding(self):
         utils.init_embedding(self.word_embeds.weight)
+        if self.position:
+            utils.init_embedding(self.position_embeds.weight)
 
     def rand_init(self, init_embedding=False):
         """
         random initialization
 
         args:
-            init_embedding: random initialize embedding or not
+            init_embedding: random initialize word embedding or not
         """
         if init_embedding:
             utils.init_embedding(self.word_embeds.weight)
+        if self.position:
+            utils.init_embedding(self.position_embeds.weight)
         utils.init_lstm(self.lstm)
 
-    def forward(self, sentence, hidden=None):
+    def forward(self, sentence, position, hidden=None):
         '''
         args:
             sentence (batch_size, word_seq_len) : word-level representation of sentence
@@ -68,7 +80,13 @@ class LSTM(nn.Module):
         return:
             output (batch_size, tag_size), hidden
         '''
-        embeds = self.word_embeds(sentence) # batch_size, seq_len, embedding_dim
+        w_embeds = self.word_embeds(sentence) # batch_size, seq_len, embedding_dim
+        if self.position:
+            p_embeds = self.position_embeds(position + self.position_bound) # batch_size, 2*seq_len, p_embed_dim
+            p_embeds = p_embeds.view(p_embeds.size(0), p_embeds.size(1) // 2, -1)
+            embeds = torch.cat([w_embeds, p_embeds], dim=2)
+        else:
+            embeds = w_embeds
         d_embeds = self.dropout1(embeds)
 
         lstm_out, hidden = self.lstm(d_embeds, hidden) # lstm_out: batch_size, seq_length, hidden_dim

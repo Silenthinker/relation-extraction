@@ -26,17 +26,22 @@ def predict(model, data_loader, t_map, cuda=False):
     ivt_t_map = {v:k for k, v in t_map.items()}
     model.eval()
     y_pred = []
-    for feature, _ in tqdm(chain.from_iterable(data_loader)):
+    indices = []
+    for (feature, position), _, idx in tqdm(chain.from_iterable(data_loader)):
         feature = autograd.Variable(feature)
+        position = autograd.Variable(position)
         if cuda:
             feature = feature.cuda()
-        output, _ = model(feature)
+            position = position.cuda()
+        output, _ = model(feature, position)
         _, pred = torch.max(output.data, dim=1)
         if cuda:
             pred = pred.cpu()
         y_pred.append(pred.numpy().tolist())
+        indices.append(idx.numpy().tolist())
     y_pred = chain.from_iterable(y_pred)
-    return [ivt_t_map[i] for i in y_pred]
+    indices = chain.from_iterable(indices)
+    return [y for _, y in sorted(zip(indices, [ivt_t_map[i] for i in y_pred]))]
 
 parser = utils.build_parser()
 args = parser.parse_args()
@@ -58,8 +63,8 @@ else:
     
 _, test_raw_corpus = utils.load_corpus(args.train_path, args.test_path)
 if not test_raw_corpus:
-    test_raw_corpus = utils.preprocess_ddi(data_path=args.test_corpus_path, output_path=args.test_path, position=args.position)
-test_corpus = [(line.sent, line.type) for line in test_raw_corpus]
+    test_raw_corpus = utils.preprocess_ddi(data_path=args.test_corpus_path, output_path=args.test_path, position=True)
+test_corpus = [(line.sent, line.type, line.p1, line.p2) for line in test_raw_corpus]
 
 # preprocessing
 feature_mapping = checkpoint_file['f_map']
@@ -67,7 +72,7 @@ target_mapping = checkpoint_file['t_map']
 test_features, test_targets = utils.build_corpus(test_corpus, feature_mapping, target_mapping, caseless)
 
 # train/val split
-test_loader = utils.construct_bucket_dataloader(test_features, test_targets, feature_mapping['PAD'], batch_size, is_train=False)
+test_loader = utils.construct_bucket_dataloader(test_features, test_targets, feature_mapping['PAD'], batch_size, args.position_bound, is_train=False)
 
 # build model
 vocab_size = len(feature_mapping)

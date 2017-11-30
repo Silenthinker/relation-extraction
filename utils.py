@@ -3,6 +3,7 @@
 import os
 import re
 import json
+import math
 import glob
 import argparse
 import xml.etree.ElementTree as ET
@@ -236,18 +237,18 @@ def preprocess_ddi(data_path='../../data/drugddi2013/re/train', output_path='../
     print('Done')
     return res
 
-def build_vocab(sents, mini_count=5, caseless=True):
+def build_vocab(sents, min_count=5, caseless=True):
     """
     Args:
         sents: list of list of strings, [[str]]
-        mini_count: threshold to replace rare words with UNK
+        min_count: threshold to replace rare words with UNK
     """
     counter = Counter()
     if caseless:
         counter.update([w.lower() for w in chain.from_iterable(sents)])
     else:
         counter.update(chain.from_iterable(sents))
-    str2int = [w for w, c in counter.items() if c >= mini_count]
+    str2int = [w for w, c in counter.items() if c >= min_count]
     str2int = {w:i for i, w in enumerate(str2int, 1)} # start from 1
     str2int['UNK'] = 0
     str2int['PAD'] = len(str2int)
@@ -280,10 +281,13 @@ def build_corpus(raw_corpus, feature_mapping, target_mapping, caseless):
     build features and targets
     Args:
         raw_corpus: [([str], str)], list of tuple(features, target)
+        or optionally with positions [int], [int]
     """
     raw_features = [tup[0] for tup in raw_corpus]
     raw_targets = [tup[1] for tup in raw_corpus]
     features = build_features(raw_features, feature_mapping, caseless)
+    raw_positions = [chain.from_iterable([tup[2], tup[3]]) for tup in raw_corpus]
+    features = [list(chain.from_iterable([f, p])) for f, p in zip(features, raw_positions)]
     targets = build_targets(raw_targets, target_mapping)
     return features, targets
 
@@ -313,7 +317,7 @@ def calc_threshold_mean(features):
     """
     calculate the threshold for bucket by mean
     """
-    lines_len = list(map(lambda t: len(t) + 1, features))
+    lines_len = list(map(lambda t: len(t)//3 + 1, features))
     average = int(sum(lines_len) / len(lines_len))
     lower_line = list(filter(lambda t: t < average, lines_len))
     upper_line = list(filter(lambda t: t > average, lines_len))
@@ -329,22 +333,37 @@ def calc_threshold_mean(features):
     max_len = None if max_len == upper_average else max_len
     return [line_len for line_len in [lower_average, average, upper_average, max_len] if line_len]
 
-def construct_bucket_dataloader(input_features, input_targets, pad_feature, batch_size, is_train=True):
+def construct_bucket_dataloader(input_features, input_targets, pad_feature, batch_size, position_bound, is_train=True):
     """
     Construct bucket
+    input_features: [[int]], with concatenated word and position features
     """
+    def pad_position(p_feature, threshold, cur_len, position_bound):
+        """
+        assign position to padded text with range check
+        """
+        p_feature = p_feature + list(range(p_feature[-1]+1, p_feature[-1]+1+threshold - cur_len))
+        return list(map(lambda p: p if abs(p) <= position_bound else math.copysign(position_bound, p), p_feature))
+        
     # encode and padding
     thresholds = calc_threshold_mean(input_features)
-    buckets = [[[], []] for _ in range(len(thresholds))]
-    for feature, target in zip(input_features, input_targets):
-        cur_len = len(feature)
+    buckets = [[[], [], [], []] for _ in range(len(thresholds))] # [[w_feature, p_feature, idx]]
+    for i, (feature, target) in enumerate(zip(input_features, input_targets)):
+        assert len(feature) % 3 == 0, 'len(feature) % 3 != 0'
+        cur_len = len(feature) // 3
+        w_feature = feature[0:cur_len]
+        p1_feature = feature[cur_len:-cur_len]
+        p2_feature = feature[-cur_len:]
         idx = 0
         cur_len_1 = cur_len + 1
         while thresholds[idx] < cur_len_1:
             idx += 1
-        buckets[idx][0].append(feature + [pad_feature] * (thresholds[idx] - cur_len))
+        buckets[idx][0].append(w_feature + [pad_feature] * (thresholds[idx] - cur_len))
         buckets[idx][1].append([target])
-    bucket_dataset = [REDataset(torch.LongTensor(bucket[0]), torch.LongTensor(bucket[1]))
+        buckets[idx][2].append(pad_position(p1_feature, thresholds[idx], cur_len, position_bound) +
+               pad_position(p2_feature, thresholds[idx], cur_len, position_bound))
+        buckets[idx][3].append(i)
+    bucket_dataset = [REDataset(torch.LongTensor(bucket[0]), torch.LongTensor(bucket[1]), torch.LongTensor(bucket[2]), bucket[3])
                       for bucket in buckets]
     dataset_loader = [torch.utils.data.DataLoader(tup, batch_size, shuffle=is_train, drop_last=False) for tup in bucket_dataset]
     return dataset_loader
@@ -430,9 +449,12 @@ def build_parser():
     parser.add_argument('--train_size', type=float, default=0.8, help='split train corpus into train/val set according to the ratio')
     parser.add_argument('--caseless', action='store_true', help='caseless or not')
     parser.add_argument('--position', action='store_true', help='use position feature')
+    parser.add_argument('--min_count', type=int, default=3, help='exclude words with frequency less than min count')
 
     # model
     parser.add_argument('--embedding_dim', type=int, default=100, help='embedding dimension')
+    parser.add_argument('--position_dim', type=int, default=20, help='position dimension')
+    parser.add_argument('--position_bound', type=int, default=200, help='relative position in [-200, 200]; if out of range, cast to min/max')
     parser.add_argument('--hidden_dim', type=int, default=100, help='hidden layer dimension')
     parser.add_argument('--rnn_layers', type=int, default=1, help='number of rnn layers')
     parser.add_argument('--dropout_ratio', type=float, default=0.4, help='dropout ratio')

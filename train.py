@@ -20,11 +20,13 @@ def evaluate(model, data_loader, t_map, cuda=False):
     model.eval()
     y_true = []
     y_pred = []
-    for feature, target in chain.from_iterable(data_loader):
+    for (feature, position), target, _ in chain.from_iterable(data_loader):
         feature = autograd.Variable(feature)
+        position = autograd.Variable(position)
         if cuda:
             feature = feature.cuda()
-        output, _ = model(feature)
+            position = position.cuda()
+        output, _ = model(feature, position)
         _, pred = torch.max(output.data, dim=1)
         if cuda:
             pred = pred.cpu() # cast back to cpu
@@ -46,10 +48,10 @@ start_epoch = 0
 
 train_raw_corpus, test_raw_corpus = utils.load_corpus(args.train_path, args.test_path)
 if not train_raw_corpus or not test_raw_corpus:
-    train_raw_corpus = utils.preprocess_ddi(data_path=args.train_corpus_path, output_path=args.train_path, position=args.position)
-    test_raw_corpus = utils.preprocess_ddi(data_path=args.test_corpus_path, output_path=args.test_path, position=args.position)
-train_corpus = [(line.sent, line.type) for line in train_raw_corpus]
-test_corpus = [(line.sent, line.type) for line in test_raw_corpus]
+    train_raw_corpus = utils.preprocess_ddi(data_path=args.train_corpus_path, output_path=args.train_path, position=True)
+    test_raw_corpus = utils.preprocess_ddi(data_path=args.test_corpus_path, output_path=args.test_path, position=True)
+train_corpus = [(line.sent, line.type, line.p1, line.p2) for line in train_raw_corpus]
+test_corpus = [(line.sent, line.type, line.p1, line.p2) for line in test_raw_corpus]
 
 caseless = args.caseless
 batch_size = args.batch_size
@@ -92,16 +94,17 @@ if not os.path.isdir(checkpoint_dir):
 
 # preprocessing
 sents = [tup[0] for tup in train_corpus]
-feature_mapping = utils.build_vocab(sents, mini_count=5, caseless=caseless)
+feature_mapping = utils.build_vocab(sents, min_count=args.min_count, caseless=caseless)
 target_mapping = {'null':0, 'advise':1, 'effect':2, 'mechanism':3, 'int':4}
 input_features, input_targets = utils.build_corpus(train_corpus, feature_mapping, target_mapping, caseless)
 test_features, test_targets = utils.build_corpus(test_corpus, feature_mapping, target_mapping, caseless)
 
 # train/val split
 train_features, train_targets, val_features, val_targets = utils.stratified_shuffle_split(input_features, input_targets, train_size=args.train_size)
-train_loader = utils.construct_bucket_dataloader(train_features, train_targets, feature_mapping['PAD'], batch_size, is_train=True)
-val_loader = utils.construct_bucket_dataloader(val_features, val_targets, feature_mapping['PAD'], batch_size, is_train=False)
-test_loader = utils.construct_bucket_dataloader(test_features, test_targets, feature_mapping['PAD'], batch_size, is_train=False)
+train_loader = utils.construct_bucket_dataloader(train_features, train_targets, feature_mapping['PAD'], batch_size, args.position_bound, is_train=True)
+val_loader = utils.construct_bucket_dataloader(val_features, val_targets, feature_mapping['PAD'], batch_size, args.position_bound, is_train=False)
+test_loader = utils.construct_bucket_dataloader(test_features, test_targets, feature_mapping['PAD'], batch_size, args.position_bound, is_train=False)
+print('Preprocessing done! Vocab size: {}'.format(len(feature_mapping)))
 
 # build model
 vocab_size = len(feature_mapping)
@@ -147,14 +150,16 @@ tot_length = sum(map(lambda t:len(t), train_loader))
 for epoch in range(start_epoch, num_epoch):
     epoch_loss = 0
     model.train()
-    for feature, target in tqdm(chain.from_iterable(train_loader), desc=' - Tot it {}'.format(tot_length)):
+    for (feature, position), target, _ in tqdm(chain.from_iterable(train_loader), desc=' - Tot it {}'.format(tot_length)):
         feature = autograd.Variable(feature)
+        position = autograd.Variable(position)
         target = autograd.Variable(target)
         if args.cuda:
             feature = feature.cuda()
+            position = position.cuda()
             target = target.cuda()
         model.zero_grad()
-        output, _ = model(feature) 
+        output, _ = model(feature, position) 
         loss = criterion(output, target.view(-1))
         loss.backward()
         torch.nn.utils.clip_grad_norm(model.parameters(), clip_grad_norm)
@@ -180,7 +185,7 @@ for epoch in range(start_epoch, num_epoch):
         try:
             utils.save_checkpoint({
                         'epoch': epoch,
-                        'state_dict': model.cpu().state_dict(),
+                        'state_dict': model.state_dict(),
                         'optimizer': optimizer.state_dict(),
                         'f_map': feature_mapping,
                         't_map': target_mapping,
@@ -200,7 +205,6 @@ for epoch in range(start_epoch, num_epoch):
 
 
 ## TODO: 
-# special charOffset ;
+# add position embedding
 # keep drug mentions
 # better separation and reusability
-
