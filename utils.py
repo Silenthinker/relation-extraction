@@ -469,6 +469,7 @@ def build_parser():
     parser.add_argument('--num_epoch', type=int, default=200, help='number of epochs')
     parser.add_argument('--patience', type=int, default=15, help='patience for early stop')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
+    parser.add_argument('--disable_fine_tune', action='store_true', help='Disable CUDA')
     
     
     return parser

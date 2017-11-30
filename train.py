@@ -113,7 +113,7 @@ model = LSTM(vocab_size, tagset_size, args)
 
 # loss and optimizer
 criterion = nn.CrossEntropyLoss(ignore_index=feature_mapping['PAD'])
-optimizer = optim.SGD(model.parameters(), lr=lr, momentum=momentum)
+optimizer = optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=lr, momentum=momentum)
 
 # load states
 if os.path.isfile(args.load_checkpoint):
@@ -205,6 +205,5 @@ for epoch in range(start_epoch, num_epoch):
 
 
 ## TODO: 
-# add position embedding
 # keep drug mentions
 # better separation and reusability
