@@ -473,7 +473,8 @@ def build_parser():
     parser.add_argument('--num_epoch', type=int, default=200, help='number of epochs')
     parser.add_argument('--patience', type=int, default=15, help='patience for early stop')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('--disable_fine_tune', action='store_true', help='Disable CUDA')
+    parser.add_argument('--disable_fine_tune', action='store_true', help='Disable fine tuning word embedding')
+    parser.add_argument('--l2_reg', type=float, default=0.001, help='l2 regularization')
     
     
     return parser

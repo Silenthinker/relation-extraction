@@ -114,7 +114,7 @@ model = AttentionLSTM(vocab_size, tagset_size, args) if args.attention else LSTM
 
 # loss and optimizer
 criterion = nn.CrossEntropyLoss(ignore_index=feature_mapping['PAD'])
-optimizer = optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=lr, momentum=momentum)
+optimizer = optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=lr, momentum=momentum, weight_decay=args.l2_reg, nesterov=True)
 
 # load states
 if os.path.isfile(args.load_checkpoint):
@@ -207,6 +207,7 @@ for epoch in range(start_epoch, num_epoch):
 
 ## TODO: 
 # play with class weight in cross entropy loss
+# add regularization for self-attention
 # fine tune word embedding
 # implement self-attention
 # keep drug mentions

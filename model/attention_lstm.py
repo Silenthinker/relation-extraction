@@ -18,6 +18,8 @@ class Attention(nn.Module):
     def __init__(self, hidden_dim, att_hidden_dim, num_hops):
         super().__init__()
         self.w1 = nn.Linear(hidden_dim, att_hidden_dim, bias=False)
+        self.dropout1 = nn.Dropout()
+        self.dropout2 = nn.Dropout()
         self.tanh = nn.Tanh()
         self.w2 = nn.Linear(att_hidden_dim, num_hops, bias=False)
         
@@ -30,7 +32,9 @@ class Attention(nn.Module):
         """
         out = self.w1(input) # batch_size, seq_len, att_hidden_dim
         out = self.tanh(out) # batch_size, seq_len, att_hidden_dim
+        out = self.dropout1(out)
         out = self.w2(out) # batch_size, seq_len, num_hops
+        out = self.dropout2(out)
         att_weight = softmax(out, dim=1)
         return att_weight
     
