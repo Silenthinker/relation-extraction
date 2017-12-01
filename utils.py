@@ -12,6 +12,7 @@ from tqdm import tqdm
 import torch
 import torch.nn as nn
 import torch.nn.init
+import torch.nn.functional as F
 
 from itertools import chain
 from collections import Counter, namedtuple
@@ -452,6 +453,7 @@ def build_parser():
     parser.add_argument('--min_count', type=int, default=3, help='exclude words with frequency less than min count')
 
     # model
+    parser.add_argument('--attention', action='store_true', help='use attentional model')
     parser.add_argument('--embedding_dim', type=int, default=100, help='embedding dimension')
     parser.add_argument('--position_dim', type=int, default=20, help='position dimension')
     parser.add_argument('--position_bound', type=int, default=200, help='relative position in [-200, 200]; if out of range, cast to min/max')
@@ -459,6 +461,8 @@ def build_parser():
     parser.add_argument('--rnn_layers', type=int, default=1, help='number of rnn layers')
     parser.add_argument('--dropout_ratio', type=float, default=0.4, help='dropout ratio')
     parser.add_argument('--rand_embedding', action='store_true', help='use randomly initialized word embeddings')
+    parser.add_argument('--att_hidden_dim', type=int, default=200, help='attention hidden dimension')
+    parser.add_argument('--num_hops', type=int, default=1, help='number of hops of attention')
 
     # training
     parser.add_argument('--lr', type=float, default=0.01, help='learning rate')
@@ -520,6 +524,19 @@ def adjust_learning_rate(optimizer, lr):
     """
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
+    
+def softmax(input, dim=1):
+    input_size = input.size()
+    
+    trans_input = input.transpose(dim, len(input_size)-1)
+    trans_size = trans_input.size()
+
+    input_2d = trans_input.contiguous().view(-1, trans_size[-1])
+    
+    soft_max_2d = F.softmax(input_2d)
+    
+    soft_max_nd = soft_max_2d.view(*trans_size)
+    return soft_max_nd.transpose(dim, len(input_size)-1)
 
 if __name__ == '__main__':
     # res = preprocess_ddi()

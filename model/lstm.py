@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import torch
-import torch.autograd as autograd
 import torch.nn as nn
 import utils
-
-
+        
 class LSTM(nn.Module):
     """LSTM model
 

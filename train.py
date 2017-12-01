@@ -15,6 +15,7 @@ import torch.optim as optim
 
 import utils
 from model.lstm import LSTM
+from model.attention_lstm import AttentionLSTM
 
 def evaluate(model, data_loader, t_map, cuda=False):
     model.eval()
@@ -109,7 +110,7 @@ print('Preprocessing done! Vocab size: {}'.format(len(feature_mapping)))
 # build model
 vocab_size = len(feature_mapping)
 tagset_size = len(target_mapping)
-model = LSTM(vocab_size, tagset_size, args)
+model = AttentionLSTM(vocab_size, tagset_size, args) if args.attention else LSTM(vocab_size, tagset_size, args)
 
 # loss and optimizer
 criterion = nn.CrossEntropyLoss(ignore_index=feature_mapping['PAD'])
@@ -205,6 +206,7 @@ for epoch in range(start_epoch, num_epoch):
 
 
 ## TODO: 
+# play with class weight in cross entropy loss
 # fine tune word embedding
 # implement self-attention
 # keep drug mentions
