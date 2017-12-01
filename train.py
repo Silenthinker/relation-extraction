@@ -205,5 +205,7 @@ for epoch in range(start_epoch, num_epoch):
 
 
 ## TODO: 
+# fine tune word embedding
+# implement self-attention
 # keep drug mentions
 # better separation and reusability
