@@ -9,7 +9,9 @@ from torch import nn
 
 from model.lstm import LSTM
 
+import utils
 from utils import softmax
+
 
 class Attention_0(nn.Module):
     """
@@ -47,6 +49,9 @@ class Attention_1(nn.Module):
         self.tanh = nn.Tanh()
         self.w1 = nn.Linear(hidden_dim, num_hops, bias=False)
         self.dropout1 = nn.Dropout()
+     
+    def rand_init(self):
+        utils.init_lineawr(self.w1)
         
     def forward(self, input):
         """
@@ -67,6 +72,20 @@ class AttentionLSTM(LSTM):
         self.attention = Attention_1(args.hidden_dim, args.att_hidden_dim, args.num_hops)
         self.att2out = nn.Linear(args.num_hops*args.hidden_dim, self.tagset_size, bias=True)
         self.dropout3 = nn.Dropout(p=args.dropout_ratio)
+        
+    def rand_init(self, init_embedding=False):
+        """
+        random initialization
+
+        args:
+            init_embedding: random initialize word embedding or not
+        """
+        if init_embedding:
+            utils.init_embedding(self.word_embeds.weight)
+        if self.position:
+            utils.init_embedding(self.position_embeds.weight)
+        utils.init_lstm(self.lstm)
+        utils.init_linear(self.att2out)
         
     def forward(self, sentence, position, hidden=None):
         '''

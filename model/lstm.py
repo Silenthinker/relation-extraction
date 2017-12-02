@@ -70,6 +70,7 @@ class LSTM(nn.Module):
         if self.position:
             utils.init_embedding(self.position_embeds.weight)
         utils.init_lstm(self.lstm)
+        utils.init_linear(self.linear)
 
     def forward(self, sentence, position, hidden=None):
         '''
