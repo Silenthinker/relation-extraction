@@ -60,6 +60,7 @@ num_epoch = args.num_epoch
 lr = args.lr
 momentum = args.momentum
 clip_grad_norm = args.clip_grad_norm
+class_weight = torch.FloatTensor([ 0.00533333,  0.1536    ,  0.07466667,  0.096     ,  0.6704    ])
 """
 train_corpus = [
     (['This', 'causes', 'an', 'increase', '.'], 'effect'), 
@@ -113,7 +114,7 @@ tagset_size = len(target_mapping)
 model = AttentionLSTM(vocab_size, tagset_size, args) if args.attention else LSTM(vocab_size, tagset_size, args)
 
 # loss and optimizer
-criterion = nn.CrossEntropyLoss(ignore_index=feature_mapping['PAD'])
+criterion = nn.CrossEntropyLoss(weight=class_weight, ignore_index=feature_mapping['PAD'])
 optimizer = optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=lr, momentum=momentum, weight_decay=args.l2_reg, nesterov=True)
 
 # load states
@@ -209,6 +210,5 @@ for epoch in range(start_epoch, num_epoch):
 # play with class weight in cross entropy loss
 # add regularization for self-attention
 # fine tune word embedding
-# implement self-attention
 # keep drug mentions
 # better separation and reusability
