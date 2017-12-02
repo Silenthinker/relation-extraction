@@ -45,7 +45,7 @@ class Attention_1(nn.Module):
     def __init__(self, hidden_dim, att_hidden_dim, num_hops):
         super().__init__()
         self.tanh = nn.Tanh()
-        self.w1 = nn.Linear(att_hidden_dim, num_hops, bias=False)
+        self.w1 = nn.Linear(hidden_dim, num_hops, bias=False)
         self.dropout1 = nn.Dropout()
         
     def forward(self, input):
