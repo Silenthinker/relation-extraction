@@ -21,6 +21,7 @@ import torch.optim as optim
 
 import utils
 from model.lstm import LSTM
+from model.attention_lstm import AttentionLSTM
 
 def predict(model, data_loader, t_map, cuda=False):
     ivt_t_map = {v:k for k, v in t_map.items()}
@@ -77,7 +78,7 @@ test_loader = utils.construct_bucket_dataloader(test_features, test_targets, fea
 # build model
 vocab_size = len(feature_mapping)
 tagset_size = len(target_mapping)
-model = LSTM(vocab_size, tagset_size, args)
+model = AttentionLSTM(vocab_size, tagset_size, args) if args.attention else LSTM(vocab_size, tagset_size, args)
 
 
 # load states

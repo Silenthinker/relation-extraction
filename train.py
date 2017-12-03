@@ -206,7 +206,7 @@ for epoch in range(start_epoch, num_epoch):
 
 
 ## TODO: 
-# play with class weight in cross entropy loss
+# residual connection using rnncell
 # add regularization for self-attention
 # fine tune word embedding
 # keep drug mentions
