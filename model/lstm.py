@@ -30,7 +30,8 @@ class LSTM(nn.Module):
         self.tagset_size = tagset_size
         self.rnn_layers = args.rnn_layers
         self.dropout_ratio = args.dropout_ratio
-
+        self.args = args
+        
         self.word_embeds = nn.Embedding(self.vocab_size, self.embedding_dim)
         if args.position:
             self.position_embeds = nn.Embedding(self.position_size, self.position_dim)
@@ -71,7 +72,7 @@ class LSTM(nn.Module):
         utils.init_linear(self.linear)
 
     def update_part_embedding(self, indices):
-        hook = utils.update_part_embedding(indices)
+        hook = utils.update_part_embedding(indices, self.args.cuda)
         self.word_embeds.weight.register_hook(hook)
         
     def forward(self, sentence, position, hidden=None):

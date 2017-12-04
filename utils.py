@@ -391,13 +391,15 @@ def load_word_embedding(file, feature_mapping, emb_dim, delimiter=' '):
     print('{} pretrained words added out of {}'.format(n_pretrain, vocab_size))
     return word_embedding, in_doc_word_indices
 
-def update_part_embedding(indices):
+def update_part_embedding(indices, use_cuda=False):
     """
     update only non-pretrained embeddings
     Args:
         indices: [int]
     """
     indices = torch.LongTensor(indices)
+    if use_cuda:
+        indices = indices.cuda()
     def hook(grad):
         grad_copy = grad.clone()
         grad_copy[indices] = 0
