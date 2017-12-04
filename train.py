@@ -126,10 +126,12 @@ if os.path.isfile(args.load_checkpoint):
 else:
     print('no checkpoint file found: {}, train from scratch...'.format(args.load_checkpoint))
     if not args.rand_embedding:
-        pretrained_word_embedding = utils.load_word_embedding(args.emb_file, feature_mapping, args.embedding_dim)
+        pretrained_word_embedding, in_doc_word_indices = utils.load_word_embedding(args.emb_file, feature_mapping, args.embedding_dim)
         print(pretrained_word_embedding.size())
         print(vocab_size)
         model.load_pretrained_embedding(pretrained_word_embedding)
+        if args.disable_fine_tune:
+            model.update_part_embedding(in_doc_word_indices) # update only non-pretrained words
     model.rand_init(init_embedding=args.rand_embedding)
 
 if args.cuda:
@@ -208,6 +210,5 @@ for epoch in range(start_epoch, num_epoch):
 ## TODO: 
 # residual connection using rnncell
 # add regularization for self-attention
-# fine tune word embedding
 # keep drug mentions
 # better separation and reusability

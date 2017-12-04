@@ -32,8 +32,6 @@ class LSTM(nn.Module):
         self.dropout_ratio = args.dropout_ratio
 
         self.word_embeds = nn.Embedding(self.vocab_size, self.embedding_dim)
-        if args.disable_fine_tune:
-            self.word_embeds.weight.requires_grad = False
         if args.position:
             self.position_embeds = nn.Embedding(self.position_size, self.position_dim)
         self.lstm = nn.LSTM(self.embedding_dim + 2*self.position_dim, self.hidden_dim // 2,
@@ -72,6 +70,10 @@ class LSTM(nn.Module):
         utils.init_lstm(self.lstm)
         utils.init_linear(self.linear)
 
+    def update_part_embedding(self, indices):
+        hook = utils.update_part_embedding(indices)
+        self.word_embeds.weight.register_hook(hook)
+        
     def forward(self, sentence, position, hidden=None):
         '''
         args:

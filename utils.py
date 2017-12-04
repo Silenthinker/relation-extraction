@@ -376,6 +376,7 @@ def load_word_embedding(file, feature_mapping, emb_dim, delimiter=' '):
     vocab_size = len(feature_mapping)
     word_embedding = torch.FloatTensor(vocab_size, emb_dim)
     init_embedding(word_embedding)
+    in_doc_word_indices = []
     
     n_pretrain = 0
     with open(file, 'r') as f:
@@ -386,9 +387,24 @@ def load_word_embedding(file, feature_mapping, emb_dim, delimiter=' '):
                 n_pretrain += 1
                 vec = list(map(lambda x:float(x), line[1:]))
                 word_embedding[feature_mapping[w]] = torch.FloatTensor(vec)
+                in_doc_word_indices.append(feature_mapping[w])
     print('{} pretrained words added out of {}'.format(n_pretrain, vocab_size))
-    return word_embedding
-            
+    return word_embedding, in_doc_word_indices
+
+def update_part_embedding(indices):
+    """
+    update only non-pretrained embeddings
+    Args:
+        indices: [int]
+    """
+    indices = torch.LongTensor(indices)
+    def hook(grad):
+        grad_copy = grad.clone()
+        grad_copy[indices] = 0
+        return grad_copy
+    return hook
+
+        
 def init_embedding(input_embedding):
     """
     Initialize embedding
