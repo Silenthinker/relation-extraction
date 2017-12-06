@@ -20,6 +20,7 @@ import torch.nn as nn
 import torch.optim as optim
 
 import utils
+import options
 from model.lstm import LSTM
 from model.attention_lstm import AttentionLSTM
 
@@ -28,9 +29,10 @@ def predict(model, data_loader, t_map, cuda=False):
     model.eval()
     y_pred = []
     indices = []
-    for (feature, position), _, idx in tqdm(chain.from_iterable(data_loader)):
-        feature = autograd.Variable(feature)
-        position = autograd.Variable(position)
+    for sample in tqdm(chain.from_iterable(data_loader)):
+        feature = autograd.Variable(sample['feature'])
+        position = autograd.Variable(sample['position'])
+        idx = sample['index']
         if cuda:
             feature = feature.cuda()
             position = position.cuda()
@@ -44,55 +46,64 @@ def predict(model, data_loader, t_map, cuda=False):
     indices = chain.from_iterable(indices)
     return [y for _, y in sorted(zip(indices, [ivt_t_map[i] for i in y_pred]))]
 
-parser = utils.build_parser()
-args = parser.parse_args()
-args.cuda = not args.disable_cuda and torch.cuda.is_available()
-
-caseless = args.caseless
-batch_size = args.batch_size
-num_epoch = args.num_epoch
-lr = args.lr
-momentum = args.momentum
-clip_grad_norm = args.clip_grad_norm
-
-if os.path.isfile(args.load_checkpoint):
-    print('Loading checkpoint file from {}...'.format(args.load_checkpoint))
-    checkpoint_file = torch.load(args.load_checkpoint)
-else:
-    print('No checkpoint file found: {}'.format(args.load_checkpoint))
-    raise OSError
+def main():
+    parser = options.get_parser('Generator')
+    options.add_dataset_args(parser)
+    options.add_preprocessing_args(parser)
+    options.add_model_args(parser)
+    options.add_checkpoint_args(parser)
+    options.add_generation_args(parser)
     
-_, test_raw_corpus = utils.load_corpus(args.train_path, args.test_path)
-if not test_raw_corpus:
-    test_raw_corpus = utils.preprocess_ddi(data_path=args.test_corpus_path, output_path=args.test_path, position=True)
-test_corpus = [(line.sent, line.type, line.p1, line.p2) for line in test_raw_corpus]
+    args = parser.parse_args()
+    print(args)
+    
+    args.cuda = not args.disable_cuda and torch.cuda.is_available()
+    
+    
+    caseless = args.caseless
+    batch_size = args.batch_size
+    
+    
+    if os.path.isfile(args.load_checkpoint):
+        print('Loading checkpoint file from {}...'.format(args.load_checkpoint))
+        checkpoint_file = torch.load(args.load_checkpoint)
+    else:
+        print('No checkpoint file found: {}'.format(args.load_checkpoint))
+        raise OSError
+        
+    _, test_raw_corpus = utils.load_corpus(args.train_path, args.test_path)
+    if not test_raw_corpus:
+        test_raw_corpus = utils.preprocess_ddi(data_path=args.test_corpus_path, output_path=args.test_path, position=True)
+    test_corpus = [(line.sent, line.type, line.p1, line.p2) for line in test_raw_corpus]
+    
+    # preprocessing
+    feature_map = checkpoint_file['f_map']
+    target_map = checkpoint_file['t_map']
+    test_features, test_targets = utils.build_corpus(test_corpus, feature_map, target_map, caseless)
+    
+    # train/val split
+    test_loader = utils.construct_bucket_dataloader(test_features, test_targets, feature_map['PAD'], batch_size, args.position_bound, is_train=False)
+    
+    # build model
+    vocab_size = len(feature_map)
+    tagset_size = len(target_map)
+    model = AttentionLSTM(vocab_size, tagset_size, args) if args.attention else LSTM(vocab_size, tagset_size, args)
+    
+    
+    # load states
+    model.load_state_dict(checkpoint_file['state_dict'])
+    
+    if args.cuda:
+        model.cuda()
+    
+    y_pred = predict(model, test_loader, target_map, cuda=args.cuda)
+    assert len(y_pred) == len(test_corpus), 'length of prediction is inconsistent with that of data set'
+    # write result: sent_id|e1|e2|ddi|type
+    with open(args.predict_file, 'w') as f:
+        for tup, pred in zip(test_raw_corpus, y_pred):
+            ddi = 0 if pred == 'null' else 1
+            f.write('|'.join([tup.sent_id, tup.e1, tup.e2, str(ddi), pred]))
+            f.write('\n')
 
-# preprocessing
-feature_mapping = checkpoint_file['f_map']
-target_mapping = checkpoint_file['t_map']
-test_features, test_targets = utils.build_corpus(test_corpus, feature_mapping, target_mapping, caseless)
-
-# train/val split
-test_loader = utils.construct_bucket_dataloader(test_features, test_targets, feature_mapping['PAD'], batch_size, args.position_bound, is_train=False)
-
-# build model
-vocab_size = len(feature_mapping)
-tagset_size = len(target_mapping)
-model = AttentionLSTM(vocab_size, tagset_size, args) if args.attention else LSTM(vocab_size, tagset_size, args)
-
-
-# load states
-model.load_state_dict(checkpoint_file['state_dict'])
-
-if args.cuda:
-    model.cuda()
-
-y_pred = predict(model, test_loader, target_mapping, cuda=args.cuda)
-assert len(y_pred) == len(test_corpus), 'length of prediction is inconsistent with that of data set'
-# write result: sent_id|e1|e2|ddi|type
-with open(args.predict_file, 'w') as f:
-    for tup, pred in zip(test_raw_corpus, y_pred):
-        ddi = 0 if pred == 'null' else 1
-        f.write('|'.join([tup.sent_id, tup.e1, tup.e2, str(ddi), pred]))
-        f.write('\n')
-
+if __name__ == '__main__':
+    main()

@@ -8,6 +8,7 @@ import glob
 import argparse
 import xml.etree.ElementTree as ET
 from tqdm import tqdm
+from collections import Counter
 
 import torch
 import torch.nn as nn
@@ -25,7 +26,8 @@ from sklearn.utils import shuffle
 from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.metrics import precision_score, recall_score, f1_score, classification_report
 
-from data import REDataset
+from criterion import Criterion
+from data import DDI2013Dataset
 
 ''' Example
 <document id="DrugDDI.d89" origId="Aciclovir">
@@ -364,7 +366,7 @@ def construct_bucket_dataloader(input_features, input_targets, pad_feature, batc
         buckets[idx][2].append(pad_position(p1_feature, thresholds[idx], cur_len, position_bound) +
                pad_position(p2_feature, thresholds[idx], cur_len, position_bound))
         buckets[idx][3].append(i)
-    bucket_dataset = [REDataset(torch.LongTensor(bucket[0]), torch.LongTensor(bucket[1]), torch.LongTensor(bucket[2]), bucket[3])
+    bucket_dataset = [DDI2013Dataset(torch.LongTensor(bucket[0]), torch.LongTensor(bucket[1]), torch.LongTensor(bucket[2]), bucket[3])
                       for bucket in buckets]
     dataset_loader = [torch.utils.data.DataLoader(tup, batch_size, shuffle=is_train, drop_last=False) for tup in bucket_dataset]
     return dataset_loader
@@ -452,51 +454,6 @@ def save_checkpoint(state, track_list, filename):
         json.dump(track_list, f)
     torch.save(state, filename + '.model')
 
-def build_parser():
-    parser = argparse.ArgumentParser(description='Learning to extract relation')
-    # load and save
-    parser.add_argument('--train_corpus_path', default='../../data/drugddi2013/re/train', help='path to original train corpus')
-    parser.add_argument('--test_corpus_path', default='../../data/drugddi2013/re/test', help='path to original test corpus')
-    parser.add_argument('--train_path', default='../../data/drugddi2013/re/train.ddi', help='path to train data')
-    parser.add_argument('--test_path', default='../../data/drugddi2013/re/test.ddi', help='path to test data')
-    parser.add_argument('--checkpoint', default='./checkpoint/re', help='path to checkpoint prefix')
-    parser.add_argument('--load_checkpoint', default='', help='path to load checkpoint')
-    parser.add_argument('--emb_file', default='', help='path to load pretrained word embedding')
-    parser.add_argument('--predict_file', default='../../data/drugddi2013/re/task9.2_GROUP_1.txt', help='path to output predicted result')
-
-    # preprocess
-    parser.add_argument('--train_size', type=float, default=0.8, help='split train corpus into train/val set according to the ratio')
-    parser.add_argument('--caseless', action='store_true', help='caseless or not')
-    parser.add_argument('--position', action='store_true', help='use position feature')
-    parser.add_argument('--min_count', type=int, default=3, help='exclude words with frequency less than min count')
-
-    # model
-    parser.add_argument('--attention', action='store_true', help='use attentional model')
-    parser.add_argument('--embedding_dim', type=int, default=100, help='embedding dimension')
-    parser.add_argument('--position_dim', type=int, default=20, help='position dimension')
-    parser.add_argument('--position_bound', type=int, default=200, help='relative position in [-200, 200]; if out of range, cast to min/max')
-    parser.add_argument('--hidden_dim', type=int, default=100, help='hidden layer dimension')
-    parser.add_argument('--rnn_layers', type=int, default=1, help='number of rnn layers')
-    parser.add_argument('--dropout_ratio', type=float, default=0.4, help='dropout ratio')
-    parser.add_argument('--rand_embedding', action='store_true', help='use randomly initialized word embeddings')
-    parser.add_argument('--att_hidden_dim', type=int, default=200, help='attention hidden dimension')
-    parser.add_argument('--num_hops', type=int, default=1, help='number of hops of attention')
-
-    # training
-    parser.add_argument('--lr', type=float, default=0.01, help='learning rate')
-    parser.add_argument('--lr_decay', type=float, default=0.001, help='decay ratio of learning rate')
-    parser.add_argument('--momentum', type=float, default=0.9, help='momentum for sgd')
-    parser.add_argument('--clip_grad_norm', type=float, default=0.5, help='clip gradient norm')
-    parser.add_argument('--batch_size', type=int, default=128, help='batch size')
-    parser.add_argument('--num_epoch', type=int, default=200, help='number of epochs')
-    parser.add_argument('--patience', type=int, default=15, help='patience for early stop')
-    parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('--disable_fine_tune', action='store_true', help='Disable fine tuning word embedding')
-    parser.add_argument('--l2_reg', type=float, default=0.001, help='l2 regularization')
-    
-    
-    return parser
-
 def load_corpus(train_path, test_path):
     """
     load ddi corpus
@@ -534,15 +491,8 @@ def evaluate(y_true, y_pred, labels=None, target_names=None):
     precision = _evaluate(precision_score)
     recall = _evaluate(recall_score)
     f1 = _evaluate(f1_score)
-    classification_report(y_true, y_pred, labels=labels, target_names=target_names)
+    print(classification_report(y_true, y_pred, labels=labels, target_names=target_names))
     return precision, recall, f1
-
-def adjust_learning_rate(optimizer, lr):
-    """
-    shrink learning rate for pytorch
-    """
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = lr
     
 def softmax(input, dim=1):
     input_size = input.size()
@@ -557,26 +507,53 @@ def softmax(input, dim=1):
     soft_max_nd = soft_max_2d.view(*trans_size)
     return soft_max_nd.transpose(dim, len(input_size)-1)
 
-if __name__ == '__main__':
-    # res = preprocess_ddi()
-    caseless = True
-    batch_size = 2
-    raw_corpus = [
-        (['This', 'is', 'an', 'example', '.'], 'mechanism'), 
-        (['this', 'is', 'also', 'an', 'example', '.'], 'int'),
-        (['this', 'is', 'example', '.'], 'int'),
-        (['This', 'is', 'an', 'example', '.'], 'mechanism'), 
-        (['this'], 'int'),
-        ]
-    sents = [tup[0] for tup in raw_corpus]
-    feature_mapping = build_vocab(sents, mini_count=1, caseless=caseless)
-    target_mapping = {'null':0, 'advice':1, 'effect':2, 'mechanism':3, 'int':4}
-    input_features, input_targets = build_corpus(raw_corpus, feature_mapping, target_mapping, caseless)
-    dataset_loader = construct_bucket_dataloader(input_features, input_targets, feature_mapping['PAD'], caseless, batch_size, True)
-    for feature, target in chain.from_iterable(dataset_loader):
-        print(feature)
-        print(target)
-        print('-------')
+def prepare_sample(sample, volatile=False, cuda=False):
+    
+    """
+    wrap tensors in Variable class
+    Args:
+        sample: dict
+    """
+    def make_variable(tensor, cuda):
+        if cuda:
+            tensor = tensor.cuda()
+        return torch.autograd.Variable(tensor, volatile=volatile)
+    
+    return {
+            'index': make_variable(sample['index'], cuda=False),
+            'feature': make_variable(sample['feature'], cuda=cuda), 
+            'position': make_variable(sample['position'], cuda=cuda), 
+            'target': make_variable(sample['target'], cuda=cuda).view(-1)
+            }
+
+def get_class_weights(l):
+    """
+    compute class weight according to the following formula
+    given C classes with number of instances being n_1, ..., n_C
+    obtain class weight w_1, ..., w_C by
+    w_1*n_1 = ... = w_C*n_C               (1)
+    sum_{i=1}^C w_i*n_i = sum_{i=1}^C n_i (2)
+    which yields w_i = sum_{i=1}^C n_i / (C*n_i)
+    Args:
+        l: [int], containing class labels
+    """
+    n_tot = len(l)
+    counter = Counter(l)
+    C = len(counter)
+    W = ((c, n_tot*1.0/(C*n)) for c, n in counter.items())
+    W = [tup[1] for tup in sorted(W, key=itemgetter(0))]
+    
+    return W
+
+def build_loss(args, class_weights=None):
+    if args.loss == 'crossentropy':
+        criterion = nn.CrossEntropyLoss(weight=class_weights)
+    elif args.loss == 'marginloss':
+        criterion = nn.MultiMarginLoss(p=1, margin=args.margin, weight=class_weights)
+    else:
+        raise ValueError('Unknown loss: {}'.format(args.loss))
+    
+    return criterion
 
 
 
