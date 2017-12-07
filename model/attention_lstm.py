@@ -149,11 +149,11 @@ class AttentionPoolingLSTM(LSTM):
 
         lstm_out, hidden = self.lstm(d_embeds, hidden) # lstm_out: batch_size, seq_length, hidden_dim
         ## TODO: dropout or not?
-#        d_lstm_out = self.dropout2(lstm_out)
-        d_lstm_out = lstm_out
+        d_lstm_out = self.dropout2(lstm_out)
+#        d_lstm_out = lstm_out
         att_weight = self.attention(d_lstm_out) # batch_size, seq_length, num_hops
         att_weight = att_weight.transpose(1, 2) # batch_size, num_hops, seq_length
-        sent_repr = torch.matmul(att_weight, d_lstm_out).view(sentence.size(0), -1) # batch_size, num_hops*hidden_dim
+        sent_repr = torch.matmul(att_weight, lstm_out).view(sentence.size(0), -1) # batch_size, num_hops*hidden_dim
         d_sent_repr = self.dropout3(sent_repr)
         output = self.att2out(d_sent_repr) # output: batch_size, tagset_size
         
