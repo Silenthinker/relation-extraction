@@ -82,8 +82,7 @@ class Trainer:
     
     def _backward_and_opt(self):
         if self.loss is not None:
-            avg_loss = self.loss / self._sample['size']
-            avg_loss.backward()
+            self.loss.backward()
         torch.nn.utils.clip_grad_norm(self.model.parameters(), self.args.clip_grad_norm)
         self.optimizer.step()
     

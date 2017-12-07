@@ -551,9 +551,9 @@ def get_class_weights(l):
 
 def build_loss(args, class_weights=None):
     if args.loss == 'crossentropy':
-        criterion = nn.CrossEntropyLoss(size_average=False, weight=class_weights)
+        criterion = nn.CrossEntropyLoss(size_average=True, weight=class_weights)
     elif args.loss == 'marginloss':
-        criterion = nn.MultiMarginLoss(p=1, margin=args.margin, size_average=False, weight=class_weights)
+        criterion = nn.MultiMarginLoss(p=1, margin=args.margin, size_average=True, weight=class_weights)
     else:
         raise ValueError('Unknown loss: {}'.format(args.loss))
     
