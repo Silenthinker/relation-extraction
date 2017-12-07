@@ -35,9 +35,17 @@ class LSTM(nn.Module):
         self.word_embeds = nn.Embedding(self.vocab_size, self.embedding_dim)
         if args.position:
             self.position_embeds = nn.Embedding(self.position_size, self.position_dim)
+        
+        ## TODO:
+    
         self.lstm = nn.LSTM(self.embedding_dim + 2*self.position_dim, self.hidden_dim // 2,
                             num_layers=self.rnn_layers, bidirectional=True, 
                             dropout=self.dropout_ratio, batch_first=True)
+        '''
+        self.lstm = nn.GRU(self.embedding_dim + 2*self.position_dim, self.hidden_dim // 2,
+                            num_layers=self.rnn_layers, bidirectional=True, 
+                            dropout=self.dropout_ratio, batch_first=True)
+        '''
         self.dropout1 = nn.Dropout(p=self.dropout_ratio)
         self.dropout2 = nn.Dropout(p=self.dropout_ratio)
         self.linear = nn.Linear(self.hidden_dim, tagset_size)

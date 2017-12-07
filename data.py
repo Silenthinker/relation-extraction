@@ -38,4 +38,5 @@ class DDI2013Dataset(Dataset):
         
         keys = ['feature', 'position', 'target', 'index']
         res = {k:merge(k) for k in keys}
+        
         return res

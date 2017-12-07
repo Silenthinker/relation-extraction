@@ -494,7 +494,7 @@ def evaluate(y_true, y_pred, labels=None, target_names=None):
     precision = _evaluate(precision_score)
     recall = _evaluate(recall_score)
     f1 = _evaluate(f1_score)
-    print(classification_report(y_true, y_pred, labels=labels, target_names=target_names))
+#    print(classification_report(y_true, y_pred, labels=labels, target_names=target_names))
     return precision, recall, f1
     
 def softmax(input, dim=1):
@@ -526,7 +526,8 @@ def prepare_sample(sample, volatile=False, cuda=False):
             'index': make_variable(sample['index'], cuda=False),
             'feature': make_variable(sample['feature'], cuda=cuda), 
             'position': make_variable(sample['position'], cuda=cuda), 
-            'target': make_variable(sample['target'], cuda=cuda).view(-1)
+            'target': make_variable(sample['target'], cuda=cuda).view(-1),
+            'size': len(sample['index'])
             }
 
 def get_class_weights(l):
@@ -550,9 +551,9 @@ def get_class_weights(l):
 
 def build_loss(args, class_weights=None):
     if args.loss == 'crossentropy':
-        criterion = nn.CrossEntropyLoss(weight=class_weights)
+        criterion = nn.CrossEntropyLoss(size_average=False, weight=class_weights)
     elif args.loss == 'marginloss':
-        criterion = nn.MultiMarginLoss(p=1, margin=args.margin, weight=class_weights)
+        criterion = nn.MultiMarginLoss(p=1, margin=args.margin, size_average=False, weight=class_weights)
     else:
         raise ValueError('Unknown loss: {}'.format(args.loss))
     

@@ -76,13 +76,14 @@ class Trainer:
             self.optimizer.zero_grad()
         
         output, _ = self.model(self._sample['feature'], self._sample['position']) 
-        self.loss = self.criterion(output, self._sample['target'])
+        self.loss = self.criterion(output, self._sample['target']) # sum of losses
         
         return output
     
     def _backward_and_opt(self):
         if self.loss is not None:
-            self.loss.backward()
+            avg_loss = self.loss / self._sample['size']
+            avg_loss.backward()
         torch.nn.utils.clip_grad_norm(self.model.parameters(), self.args.clip_grad_norm)
         self.optimizer.step()
     
@@ -105,8 +106,9 @@ class Trainer:
         
         # forward
         output = self._forward(eval=True)
+        self.loss = self.criterion(output, self._sample['target'])
         
-        return output
+        return output, self.loss
         
     def _get_lr(self):
         return self.optimizer.param_groups[0]['lr']
