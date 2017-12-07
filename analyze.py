@@ -7,7 +7,6 @@
 from __future__ import print_function
 
 import os
-import time
 from tqdm import tqdm
 
 from itertools import chain
@@ -28,6 +27,7 @@ def predict(model, data_loader, t_map, cuda=False):
     ivt_t_map = {v:k for k, v in t_map.items()}
     model.eval()
     y_pred = []
+    y_true = []
     indices = []
     for sample in tqdm(chain.from_iterable(data_loader)):
         feature = autograd.Variable(sample['feature'])
@@ -40,14 +40,17 @@ def predict(model, data_loader, t_map, cuda=False):
         _, pred = torch.max(output.data, dim=1)
         if cuda:
             pred = pred.cpu()
+        y_true.append(sample['target'].numpy().tolist())
         y_pred.append(pred.numpy().tolist())
         indices.append(idx.numpy().tolist())
+    y_true = chain.from_iterable(y_true)
     y_pred = chain.from_iterable(y_pred)
     indices = chain.from_iterable(indices)
+    ## TODO: error analysis
     return [y for _, y in sorted(zip(indices, [ivt_t_map[i] for i in y_pred]))]
 
 def main():
-    parser = options.get_parser('Generator')
+    parser = options.get_parser('Analyzer')
     options.add_dataset_args(parser)
     options.add_preprocessing_args(parser)
     options.add_model_args(parser)

@@ -80,12 +80,16 @@ def add_optimization_args(parser):
 
 def add_model_args(parser):
     group = parser.add_argument_group('Model')
+    group.add_argument('--model', default='InterAttentionLSTM',
+                       help='specify model')
     group.add_argument('--attention', action='store_true', 
                        help='use attentional model')
     group.add_argument('--embedding_dim', type=int, default=100, 
                        help='embedding dimension')
+    group.add_argument('--relation_dim', type=int, default=100,
+                       help='relation embedding dimension')
     group.add_argument('--position_dim', type=int, default=20, 
-                       help='position dimension')
+                       help='position embedding dimension')
     group.add_argument('--position_bound', type=int, default=200, 
                        help='relative position in [-200, 200]; if out of range, cast to min/max')
     group.add_argument('--hidden_dim', type=int, default=100, 
@@ -100,6 +104,10 @@ def add_model_args(parser):
                        help='attention hidden dimension')
     group.add_argument('--num_hops', type=int, default=1, 
                        help='number of hops of attention')
+    group.add_argument('--diagonal', action='store_true',
+                       help='use diagonal bilinear for inter attention')
+    group.add_argument('--sent_repr', type=str, default='max', choices=['max', 'concat'],
+                       help='specify way to represent sentence')
     
     return group
 

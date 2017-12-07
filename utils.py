@@ -424,7 +424,10 @@ def init_linear(input_linear):
     nn.init.uniform(input_linear.weight, -bias, bias)
     if input_linear.bias is not None:
         input_linear.bias.data.zero_()
-
+        
+def init_weight(weight):
+    nn.init.xavier_uniform(weight)
+    
 def init_lstm(input_lstm):
     """
     Initialize lstm
@@ -554,6 +557,9 @@ def build_loss(args, class_weights=None):
         raise ValueError('Unknown loss: {}'.format(args.loss))
     
     return criterion
+
+def build_model(args):
+    pass
 
 
 

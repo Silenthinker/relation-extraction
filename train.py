@@ -18,7 +18,7 @@ import options
 from data import DDI2013Dataset
 from trainer import Trainer
 from model.lstm import LSTM
-from model.attention_lstm import AttentionLSTM
+from model.attention_lstm import AttentionPoolingLSTM, InterAttentionLSTM
 
 def evaluate(trainer, data_loader, t_map, cuda=False):
     y_true = []
@@ -122,7 +122,7 @@ def main():
     # build model
     vocab_size = len(feature_map)
     tagset_size = len(target_map)
-    model = AttentionLSTM(vocab_size, tagset_size, args) if args.attention else LSTM(vocab_size, tagset_size, args)
+    model = InterAttentionLSTM(vocab_size, tagset_size, args) if args.attention else LSTM(vocab_size, tagset_size, args)
     
     # loss
     criterion = utils.build_loss(args, class_weights=class_weights)
