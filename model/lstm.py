@@ -49,7 +49,7 @@ class LSTM(nn.Module):
         self.dropout1 = nn.Dropout(p=self.dropout_ratio)
         self.dropout2 = nn.Dropout(p=self.dropout_ratio)
         self.linear = nn.Linear(self.hidden_dim, tagset_size)
-
+        
     def load_pretrained_embedding(self, pre_embeddings):
         """
         load pre-trained word embedding

@@ -3,6 +3,7 @@ from __future__ import print_function
 import os
 import time
 from tqdm import tqdm
+import collections
 
 from itertools import chain
 
@@ -15,11 +16,24 @@ import torch.optim as optim
 
 import utils
 import options
+import meters
 from data import DDI2013Dataset
 from trainer import Trainer
-from model.lstm import LSTM
-from model.attention_lstm import AttentionPoolingLSTM, InterAttentionLSTM
 
+def train(data_loader, trainer, epoch):
+    tot_length = sum(map(lambda t:len(t), data_loader))
+    loss_meter = meters.AverageMeter()
+    lr = trainer.get_lr()
+    with tqdm(chain.from_iterable(data_loader), total=tot_length, desc=' Epoch {}'.format(epoch)) as pbar:
+            for sample in pbar:
+                loss = trainer.train_step(sample)
+                loss_meter.update(loss)
+                pbar.set_postfix(collections.OrderedDict([
+                        ('loss', '{:.4f} ({:.4f})'.format(loss, loss_meter.avg)),
+                        ('lr', '{:.4f}'.format(lr))
+                        ]))
+    return loss_meter.avg
+    
 def evaluate(trainer, data_loader, t_map, cuda=False):
     y_true = []
     y_pred = []
@@ -31,8 +45,7 @@ def evaluate(trainer, data_loader, t_map, cuda=False):
         _, pred = torch.max(output.data, dim=1)
         if cuda:
             pred = pred.cpu() # cast back to cpu
-            loss = loss.cpu()
-        tot_loss += loss.data[0]
+        tot_loss += loss
         y_true.append(target.numpy().tolist())
         y_pred.append(pred.numpy().tolist())
     y_true = list(chain.from_iterable(y_true))
@@ -142,7 +155,7 @@ def main():
     # build model
     vocab_size = len(feature_map)
     tagset_size = len(target_map)
-    model = AttentionPoolingLSTM(vocab_size, tagset_size, args) if args.attention else LSTM(vocab_size, tagset_size, args)
+    model = utils.build_model(args, vocab_size, tagset_size)
     
     # loss
     criterion = utils.build_loss(args, class_weights=class_weights)
@@ -178,19 +191,14 @@ def main():
     best_f1 = float('-inf')
     patience_count = 0
     start_time = time.time()
-    tot_length = sum(map(lambda t:len(t), train_loader))
+    
     
     for epoch in range(start_epoch, num_epoch):
-        epoch_loss = 0
-        for sample in tqdm(chain.from_iterable(train_loader), desc=' - Tot it {}'.format(tot_length)):
-            loss = trainer.train_step(sample)
-            epoch_loss += loss.data[0]
+        epoch_loss = train(train_loader, trainer, epoch)
     
         # update lr
         trainer.lr_step()
-        
-        epoch_loss /= tot_length
-        
+           
         dev_prec, dev_rec, dev_f1, dev_loss = evaluate(trainer, val_loader, target_map, cuda=args.cuda)
         if dev_f1 >= best_f1:
             patience_count = 0
@@ -227,6 +235,5 @@ def main():
 if __name__ == '__main__':
     main()
 ## TODO: 
+# tqdm updates loss, grad
 # residual connection using rnncell
-# add regularization for self-attention
-# keep drug mentions

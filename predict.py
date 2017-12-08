@@ -24,6 +24,7 @@ import options
 from model.lstm import LSTM
 from model.attention_lstm import AttentionPoolingLSTM
 
+
 def predict(model, data_loader, t_map, cuda=False):
     ivt_t_map = {v:k for k, v in t_map.items()}
     model.eval()

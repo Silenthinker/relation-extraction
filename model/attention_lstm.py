@@ -10,8 +10,6 @@ from torch import nn
 from model.lstm import LSTM
 
 import utils
-from utils import softmax
-
 
 class LargeIntraAttention(nn.Module):
     """
@@ -40,7 +38,7 @@ class LargeIntraAttention(nn.Module):
         out = self.dropout1(out)
         out = self.w2(out) # batch_size, seq_len, num_hops
         out = self.dropout2(out)
-        att_weight = softmax(out, dim=1)
+        att_weight = utils.softmax(out, dim=1)
         return att_weight
 
 class SmallIntraAttention(nn.Module):
@@ -65,7 +63,7 @@ class SmallIntraAttention(nn.Module):
         """
         out = self.tanh(input) # batch_size, seq_len, hidden_dim
         out = self.w1(out) # batch_size, seq_len, num_hops
-        att_weight = softmax(out, dim=1)
+        att_weight = utils.softmax(out, dim=1)
         return att_weight
 
 class InterAttention(nn.Module):
@@ -78,16 +76,11 @@ class InterAttention(nn.Module):
         self.embedding_dim = embedding_dim
         self.input_dim = input_dim
         
-        self.relation_embeds = nn.Parameter(torch.Tensor(embedding_dim, num_embeddings))
-        self.diagonal = diagonal
-        if diagonal:
-            assert embedding_dim == input_dim, 'embedding_dim == input_dim for diagonal bilinear matrix'
-            self.bilinear = nn.Parameter(torch.Tensor(1, input_dim))
-        else:
-            self.bilinear = nn.Parameter(torch.Tensor(input_dim, embedding_dim))
+        assert embedding_dim == input_dim, 'embedding_dim == input_dim for diagonal bilinear matrix'
+        self.relation_embeds = nn.Parameter(torch.Tensor(embedding_dim, num_embeddings)) 
+        
     
     def rand_init(self):
-        utils.init_weight(self.bilinear)
         utils.init_weight(self.relation_embeds)
     
     def forward(self, input):
@@ -97,13 +90,9 @@ class InterAttention(nn.Module):
         """
         batch_size = input.size(0)
         input = input.contiguous().view(-1, self.input_dim) # [batch_size*seq_length, hidden_dim]
-        if self.diagonal:
-            out = input*self.bilinear # [batch_size*seq_length, hidden_dim]
-        else:
-            out = torch.mm(input, self.bilinear) # [batch_size*seq_length, embedding_dim]
-        out = torch.mm(out, self.relation_embeds) # [batch_size*seq_length, num_embeddings]
+        out = torch.mm(input, self.relation_embeds) # [batch_size*seq_length, num_embeddings]
         out = out.view(batch_size, -1, self.num_embeddings)
-        out = softmax(out, dim=1)
+        out = utils.softmax(out, dim=1)
         
         return out
  
@@ -168,6 +157,11 @@ class InterAttentionLSTM(LSTM):
         else:
             self.att2out = nn.Linear(args.hidden_dim, self.tagset_size, bias=True)
         self.dropout3 = nn.Dropout(p=args.dropout_ratio)
+        self.__reg_params = [self.word_embeds.weight, self.attention.relation_embeds, self.att2out.weight]
+    
+    @property
+    def reg_params(self):
+        return self.__reg_params
         
     def rand_init(self, init_embedding=False):
         """
@@ -207,9 +201,9 @@ class InterAttentionLSTM(LSTM):
         att_weight = self.attention(d_lstm_out) # batch_size, seq_length, tagset_size
         att_weight = att_weight.transpose(1, 2) # batch_size, tagset_size, seq_length
         if self.args.sent_repr == 'concat':
-            sent_repr = torch.matmul(att_weight, d_lstm_out).view(sentence.size(0), -1) # batch_size, tagset_size*hidden_dim
+            sent_repr = torch.matmul(att_weight, lstm_out).view(sentence.size(0), -1) # batch_size, tagset_size*hidden_dim
         else:
-            sent_repr, _ = torch.max(torch.matmul(att_weight, d_lstm_out), dim=1) # [batch_size, hidden_dim]
+            sent_repr, _ = torch.max(torch.matmul(att_weight, lstm_out), dim=1) # [batch_size, hidden_dim]
         d_sent_repr = self.dropout3(sent_repr)
         output = self.att2out(d_sent_repr) # output: batch_size, tagset_size
         

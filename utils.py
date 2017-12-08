@@ -28,6 +28,8 @@ from sklearn.metrics import precision_score, recall_score, f1_score, classificat
 
 from criterion import Criterion
 from data import DDI2013Dataset
+from model.lstm import LSTM
+from model.attention_lstm import InterAttentionLSTM, AttentionPoolingLSTM
 
 ''' Example
 <document id="DrugDDI.d89" origId="Aciclovir">
@@ -559,8 +561,17 @@ def build_loss(args, class_weights=None):
     
     return criterion
 
-def build_model(args):
-    pass
+def build_model(args, vocab_size, tagset_size):
+    if args.model == 'InterAttentionLSTM':
+        model = InterAttentionLSTM(vocab_size, tagset_size, args)
+    elif args.model == 'AttentionPoolingLSTM':
+        model = AttentionPoolingLSTM(vocab_size, tagset_size, args)
+    elif args.model == 'lstm':
+        model = LSTM(vocab_size, tagset_size, args)
+    else:
+        raise ValueError('Unknown model {}'.format(args.model))
+        
+    return model
 
 
 

@@ -8,6 +8,7 @@ from torch.autograd import Variable
 from torch.optim.lr_scheduler import LambdaLR, ReduceLROnPlateau
 
 import utils
+from regularizer import Regularizer
 
 class Trainer:
     
@@ -32,6 +33,9 @@ class Trainer:
         # lr scheduler
         self.lr_scheduler = self._build_lr_scheduler()
         
+        # regularizer
+        self.regularizer = self.__build_regularizer(self.model.reg_params)
+        
     
     def _build_optimizer(self):
         if self.args.optimizer == 'sgd':
@@ -52,14 +56,16 @@ class Trainer:
         else:
             raise ValueError('Unknown optimizer: {}'.format(self.args.optimizer))
             
-    
+    def __build_regularizer(self, params):
+        return Regularizer(params, self.args.weight_decay, 'l2')
+        
     def _build_lr_scheduler(self):
         if self.args.lr_scheduler == 'rop':
             lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer,
                                                                       factor=self.args.lr_decay,
                                                                       patience=self.args.patience) # default mode: min
         elif self.args.lr_scheduler == 'lambdalr':
-            lr_scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lambda epoch: 1. / (1 + (epoch + 1) * self.args.lr_decay))
+            lr_scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lambda epoch: 1. / (1 + epoch * self.args.lr_decay))
         else:
             raise ValueError('Unknown lr scheduler: {}'.format(self.args.optimizer))
             
@@ -77,6 +83,8 @@ class Trainer:
         
         output, _ = self.model(self._sample['feature'], self._sample['position']) 
         self.loss = self.criterion(output, self._sample['target']) # sum of losses
+        if self.args.weight_decay > 0:
+            self.loss += self.regularizer()
         
         return output
     
@@ -96,7 +104,7 @@ class Trainer:
         
         self._backward_and_opt()
         
-        return self.loss
+        return self.loss.data[0]
         
     
     def valid_step(self, sample):
@@ -107,9 +115,9 @@ class Trainer:
         output = self._forward(eval=True)
         self.loss = self.criterion(output, self._sample['target'])
         
-        return output, self.loss
+        return output, self.loss.data[0]
         
-    def _get_lr(self):
+    def get_lr(self):
         return self.optimizer.param_groups[0]['lr']
     
     def lr_step(self, val_loss=None, epoch=None):

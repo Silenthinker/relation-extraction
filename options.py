@@ -80,10 +80,8 @@ def add_optimization_args(parser):
 
 def add_model_args(parser):
     group = parser.add_argument_group('Model')
-    group.add_argument('--model', default='InterAttentionLSTM',
+    group.add_argument('--model', default='InterAttentionLSTM', choices=['lstm', 'InterAttentionLSTM', 'AttentionPoolingLSTM'],
                        help='specify model')
-    group.add_argument('--attention', action='store_true', 
-                       help='use attentional model')
     group.add_argument('--embedding_dim', type=int, default=100, 
                        help='embedding dimension')
     group.add_argument('--relation_dim', type=int, default=100,
