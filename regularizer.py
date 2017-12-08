@@ -32,6 +32,12 @@ class Regularizer:
     def reg_vars(self):
         return self.__reg_vars
     
+    def _get_weight(self, v):
+        if hasattr(v, 'weight'):
+            return v.weight
+        else:
+            return v
+        
     def __call__(self):
         """
         compute regularization term = reg_lambda * norm(vars)
@@ -39,13 +45,14 @@ class Regularizer:
         p = 1 if self.reg_type == 'l1' else 2
         reg = None
         for v in self.reg_vars:
-            norm = v.norm(p)
+            w = self._get_weight(v)
+            norm = w.norm(p)
             # if norm is not equal 0
             if norm.data[0] > 0:
                 if reg is None: # trick to make sure bp of variable∂
-                    reg = v.norm(p)
+                    reg = norm
                 else:
-                    reg = reg + v.norm(p)
+                    reg = reg + norm
                 
         return self.reg_lambda * reg
             
