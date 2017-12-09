@@ -40,19 +40,15 @@ class Trainer:
     def _build_optimizer(self):
         if self.args.optimizer == 'sgd':
             return torch.optim.SGD(self.model.parameters(), lr=self.args.lr, 
-                                   momentum=self.args.momentum, 
-                                   weight_decay=self.args.weight_decay, nesterov=False)
+                                   momentum=self.args.momentum, nesterov=False)
         elif self.args.optimizer == 'nag':
             return torch.optim.SGD(self.model.parameters(), lr=self.args.lr, 
-                                   momentum=self.args.momentum, 
-                                   weight_decay=self.args.weight_decay, nesterov=True)
+                                   momentum=self.args.momentum, nesterov=True)
         elif self.args.optimizer == 'adam':
             return torch.optim.Adam(self.model.parameters(), lr=self.args.lr,
-                                    betas=eval(self.args.adam_betas),
-                                    weight_decay=self.args.weight_decay)
+                                    betas=eval(self.args.adam_betas))
         elif self.args.optimizer == 'adagrad':
-            return torch.optim.Adagrad(self.model.parameters(), lr=self.args.lr,
-                                       weight_decay=self.args.weight_decay)
+            return torch.optim.Adagrad(self.model.parameters(), lr=self.args.lr)
         else:
             raise ValueError('Unknown optimizer: {}'.format(self.args.optimizer))
             
