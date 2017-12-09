@@ -102,6 +102,7 @@ class AttentionPoolingLSTM(LSTM):
         self.attention = SmallIntraAttention(args.hidden_dim, args.att_hidden_dim, args.num_hops)
         self.att2out = nn.Linear(args.num_hops*args.hidden_dim, self.tagset_size, bias=True)
         self.dropout3 = nn.Dropout(p=args.dropout_ratio)
+        self.reg_params = [self.attention.w1, self.att2out]
         
     def rand_init(self, init_embedding=False):
         """
@@ -157,11 +158,7 @@ class InterAttentionLSTM(LSTM):
         else:
             self.att2out = nn.Linear(args.hidden_dim, self.tagset_size, bias=True)
         self.dropout3 = nn.Dropout(p=args.dropout_ratio)
-        self.__reg_params = [self.word_embeds, self.attention.relation_embeds, self.att2out]
-    
-    @property
-    def reg_params(self):
-        return self.__reg_params
+        self.reg_params = [self.attention.relation_embeds, self.att2out]
         
     def rand_init(self, init_embedding=False):
         """
