@@ -115,6 +115,7 @@ class AttentionPoolingLSTM(LSTM):
         utils.init_lstm(self.lstm)
         utils.init_linear(self.att2out)
         self.attention.rand_init()
+        self.att_weight = None
         
     def forward(self, sentence, position, hidden=None):
         '''
@@ -140,11 +141,12 @@ class AttentionPoolingLSTM(LSTM):
 #        d_lstm_out = lstm_out
         att_weight = self.attention(d_lstm_out) # batch_size, seq_length, num_hops
         att_weight = att_weight.transpose(1, 2) # batch_size, num_hops, seq_length
+        self.att_weight = att_weight[:, 0, :]
         sent_repr = torch.matmul(att_weight, lstm_out).view(sentence.size(0), -1) # batch_size, num_hops*hidden_dim
         d_sent_repr = self.dropout3(sent_repr)
         output = self.att2out(d_sent_repr) # output: batch_size, tagset_size
         
-        return output, hidden
+        return {'output': output, 'att_weight': self.att_weight}, hidden
 
 class InterAttentionLSTM(LSTM):
     def __init__(self, vocab_size, tagset_size, args):
@@ -210,6 +212,6 @@ class InterAttentionLSTM(LSTM):
             scores_buffer.append(torch.norm(n_d_sent_repr - n_relation_embs[:, i].contiguous().view(-1, self.hidden_dim), 2, 1)) # [batch_size, 1]
         scores = -torch.stack(scores_buffer, dim=1)
 
-        return scores, hidden
+        return {'output': scores}, hidden
     
         
