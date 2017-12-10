@@ -512,6 +512,11 @@ def softmax(input, dim=1):
     soft_max_nd = soft_max_2d.view(*trans_size)
     return soft_max_nd.transpose(dim, len(input_size)-1)
 
+def make_variable(tensor, cuda=False, volatile=False, requires_grad=False):
+    if cuda:
+        tensor = tensor.cuda()
+    return torch.autograd.Variable(tensor, volatile=volatile, requires_grad=requires_grad)
+    
 def prepare_sample(sample, volatile=False, cuda=False):
     
     """
@@ -519,16 +524,12 @@ def prepare_sample(sample, volatile=False, cuda=False):
     Args:
         sample: dict
     """
-    def make_variable(tensor, cuda):
-        if cuda:
-            tensor = tensor.cuda()
-        return torch.autograd.Variable(tensor, volatile=volatile)
     
     return {
-            'index': make_variable(sample['index'], cuda=False),
-            'feature': make_variable(sample['feature'], cuda=cuda), 
-            'position': make_variable(sample['position'], cuda=cuda), 
-            'target': make_variable(sample['target'], cuda=cuda).view(-1),
+            'index': make_variable(sample['index'], cuda=False, volatile=volatile),
+            'feature': make_variable(sample['feature'], cuda=cuda, volatile=volatile), 
+            'position': make_variable(sample['position'], cuda=cuda, volatile=volatile), 
+            'target': make_variable(sample['target'], cuda=cuda, volatile=volatile).view(-1),
             'size': len(sample['index'])
             }
 
@@ -557,7 +558,7 @@ def build_loss(args, class_weights=None):
     elif args.loss == 'marginloss':
         criterion = nn.MultiMarginLoss(p=1, margin=args.margin, size_average=True, weight=class_weights)
     elif args.loss == 'hingeloss':
-        criterion = HingeLoss(margin=1)
+        criterion = HingeLoss(args)
     else:
         raise ValueError('Unknown loss: {}'.format(args.loss))
     
