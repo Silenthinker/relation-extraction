@@ -88,7 +88,7 @@ def main():
     # build model
     vocab_size = len(feature_map)
     tagset_size = len(target_map)
-    model = AttentionPoolingLSTM(vocab_size, tagset_size, args) if args.attention else LSTM(vocab_size, tagset_size, args)
+    model = utils.build_model(args, vocab_size, tagset_size)
     
     
     # load states
