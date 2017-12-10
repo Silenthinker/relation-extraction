@@ -4,7 +4,6 @@
 """
 import torch
 from torch import nn
-from torch.autograd import Variable
 
 import utils
 
@@ -15,7 +14,7 @@ class HingeLoss(nn.Module):
     def __init__(self, args):
         super().__init__()
         self.margin = args.margin
-        self.cuda = args.cuda
+        self.use_cuda = args.cuda
         
     def forward(self, input, target):
         """
@@ -25,15 +24,15 @@ class HingeLoss(nn.Module):
         """
         batch_size, num_class = input.size()
         mask = torch.ByteTensor(input.size())
-        if self.cuda:
+        if self.use_cuda:
             mask = mask.cuda()
         mask.fill_(1)
         mask.scatter_(1, target.data.view(batch_size, -1), 0)
-        pos_scores = torch.masked_select(input, utils.make_variable(~mask, self.cuda, False, requires_grad=False)) # [batch_size]
-        neg_scores = torch.masked_select(input, utils.make_variable(mask, self.cuda, False, requires_grad=False)).view(batch_size, -1) # [batch_size, num_class - 1]
+        pos_scores = torch.masked_select(input, utils.make_variable(~mask, self.use_cuda, False, requires_grad=False)) # [batch_size]
+        neg_scores = torch.masked_select(input, utils.make_variable(mask, self.use_cuda, False, requires_grad=False)).view(batch_size, -1) # [batch_size, num_class - 1]
         max_neg_scores, _ = torch.max(neg_scores, 1, keepdim=False) # [batch_size]
         _losses = self.margin - pos_scores + max_neg_scores
-        losses = torch.max(utils.make_variable(torch.Tensor([0]), self.cuda, False, requires_grad=False), _losses)
+        losses = torch.max(utils.make_variable(torch.Tensor([0]), self.use_cuda, False, requires_grad=False), _losses)
         loss = torch.mean(losses)
         
         return loss
