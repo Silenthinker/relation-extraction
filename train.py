@@ -41,7 +41,7 @@ def evaluate(trainer, data_loader, t_map, cuda=False):
     tot_loss = 0
     for sample in chain.from_iterable(data_loader):
         target = sample['target']
-        output, loss = trainer.valid_step(sample)
+        _, loss = trainer.valid_step(sample)
         pred = trainer.pred_step(sample)
         if cuda:
             pred = pred.cpu() # cast back to cpu

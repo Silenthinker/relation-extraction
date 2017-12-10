@@ -28,24 +28,38 @@ from model.attention_lstm import AttentionPoolingLSTM
 def predict(model, data_loader, t_map, cuda=False):
     ivt_t_map = {v:k for k, v in t_map.items()}
     model.eval()
+    y_true = []
     y_pred = []
+    att_weights = []
     indices = []
     for sample in tqdm(chain.from_iterable(data_loader)):
         feature = autograd.Variable(sample['feature'])
         position = autograd.Variable(sample['position'])
+        target = sample['target']
         idx = sample['index']
         if cuda:
             feature = feature.cuda()
             position = position.cuda()
         output_dict, _ = model(feature, position)
+        att_weight = output_dict['att_weight'].data
         _, pred = torch.max(output_dict['output'].data, dim=1)
         if cuda:
             pred = pred.cpu()
+            att_weight = att_weight.cpu()
+        y_true.append(target.numpy().flatten().tolist())
         y_pred.append(pred.numpy().tolist())
         indices.append(idx.numpy().tolist())
+        att_weights.append(att_weight.numpy().tolist())
+    
+    y_true = chain.from_iterable(y_true)
     y_pred = chain.from_iterable(y_pred)
-    indices = chain.from_iterable(indices)
-    return [y for _, y in sorted(zip(indices, [ivt_t_map[i] for i in y_pred]))]
+    indices = list(chain.from_iterable(indices))
+    att_weights = chain.from_iterable(att_weights)
+    y_true = [y for _, y in sorted(zip(indices, [ivt_t_map[i] for i in y_true]))]
+    y_pred = [y for _, y in sorted(zip(indices, [ivt_t_map[i] for i in y_pred]))]
+    att_weights = [y for _, y in sorted(zip(indices, att_weights))]
+    
+    return y_true, y_pred, att_weights
 
 def main():
     parser = options.get_parser('Generator')
@@ -97,14 +111,17 @@ def main():
     if args.cuda:
         model.cuda()
     
-    y_pred = predict(model, test_loader, target_map, cuda=args.cuda)
+    y_true, y_pred, att_weights = predict(model, test_loader, target_map, cuda=args.cuda)
     assert len(y_pred) == len(test_corpus), 'length of prediction is inconsistent with that of data set'
     # write result: sent_id|e1|e2|ddi|type
-    with open(args.predict_file, 'w') as f:
-        for tup, pred in zip(test_raw_corpus, y_pred):
-            ddi = 0 if pred == 'null' else 1
-            f.write('|'.join([tup.sent_id, tup.e1, tup.e2, str(ddi), pred]))
-            f.write('\n')
+    with open(args.analysis_file, 'w') as f:
+        f.write(' | '.join(['target', 'sent', 'att_weight']))
+        f.write('\n')
+        for tup, target, pred, att_weight in zip(test_raw_corpus, y_true, y_pred, att_weights):
+            if target == pred and target != 'null':
+                f.write('{}\n'.format(target))
+                f.write('{}\n'.format(' '.join(tup.sent)))
+                f.write('{}\n\n'.format(' '.join(map(lambda x: str(round(x, 4)), att_weight))))
 
 if __name__ == '__main__':
     main()

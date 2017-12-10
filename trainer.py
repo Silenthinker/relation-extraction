@@ -77,12 +77,12 @@ class Trainer:
             self.model.train()
             self.optimizer.zero_grad()
         
-        output, _ = self.model(self._sample['feature'], self._sample['position']) 
-        self.loss = self.criterion(output, self._sample['target']) # sum of losses
+        output_dict, _ = self.model(self._sample['feature'], self._sample['position']) 
+        self.loss = self.criterion(output_dict['output'], self._sample['target']) # sum of losses
         if self.args.weight_decay > 0:
             self.loss += self.regularizer()
         
-        return output
+        return output_dict
     
     def _backward_and_opt(self):
         if self.loss is not None:
@@ -108,16 +108,16 @@ class Trainer:
         self._prepare_sample(sample, volatile=True, cuda=self.args.cuda)
         
         # forward
-        output = self._forward(eval=True)
-        self.loss = self.criterion(output, self._sample['target'])
+        output_dict = self._forward(eval=True)
+        self.loss = self.criterion(output_dict['output'], self._sample['target'])
         
-        return output, self.loss.data[0]
+        return output_dict, self.loss.data[0]
     
     def pred_step(self, sample):
         self._prepare_sample(sample, volatile=True, cuda=self.args.cuda)
         
         self.model.eval()
-        pred, output = self.model.predict(self._sample['feature'], self._sample['position'])
+        pred, output_dict = self.model.predict(self._sample['feature'], self._sample['position'])
 #        print(sample['target'], pred)
         return pred
         

@@ -39,8 +39,8 @@ def predict(model, data_loader, t_map, cuda=False):
         if cuda:
             feature = feature.cuda()
             position = position.cuda()
-        output, _ = model(feature, position)
-        _, pred = torch.max(output.data, dim=1)
+        output_dict, _ = model(feature, position)
+        _, pred = torch.max(output_dict['output'].data, dim=1)
         if cuda:
             pred = pred.cpu()
         y_true.append(target.numpy().flatten().tolist())
