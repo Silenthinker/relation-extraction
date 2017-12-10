@@ -7,6 +7,7 @@
 from __future__ import print_function
 
 import os
+import time
 from tqdm import tqdm
 
 from itertools import chain
@@ -23,15 +24,17 @@ import options
 from model.lstm import LSTM
 from model.attention_lstm import AttentionPoolingLSTM
 
+
 def predict(model, data_loader, t_map, cuda=False):
     ivt_t_map = {v:k for k, v in t_map.items()}
     model.eval()
-    y_pred = []
     y_true = []
+    y_pred = []
     indices = []
     for sample in tqdm(chain.from_iterable(data_loader)):
         feature = autograd.Variable(sample['feature'])
         position = autograd.Variable(sample['position'])
+        target = sample['target']
         idx = sample['index']
         if cuda:
             feature = feature.cuda()
@@ -40,17 +43,20 @@ def predict(model, data_loader, t_map, cuda=False):
         _, pred = torch.max(output.data, dim=1)
         if cuda:
             pred = pred.cpu()
-        y_true.append(sample['target'].numpy().tolist())
+        y_true.append(target.numpy().flatten().tolist())
         y_pred.append(pred.numpy().tolist())
         indices.append(idx.numpy().tolist())
+    
     y_true = chain.from_iterable(y_true)
     y_pred = chain.from_iterable(y_pred)
-    indices = chain.from_iterable(indices)
-    ## TODO: error analysis
-    return [y for _, y in sorted(zip(indices, [ivt_t_map[i] for i in y_pred]))]
+    indices = list(chain.from_iterable(indices))
+    y_true = [y for _, y in sorted(zip(indices, [ivt_t_map[i] for i in y_true]))]
+    y_pred = [y for _, y in sorted(zip(indices, [ivt_t_map[i] for i in y_pred]))]
+    
+    return y_true, y_pred
 
 def main():
-    parser = options.get_parser('Analyzer')
+    parser = options.get_parser('Generator')
     options.add_dataset_args(parser)
     options.add_preprocessing_args(parser)
     options.add_model_args(parser)
@@ -90,7 +96,7 @@ def main():
     # build model
     vocab_size = len(feature_map)
     tagset_size = len(target_map)
-    model = AttentionPoolingLSTM(vocab_size, tagset_size, args) if args.attention else LSTM(vocab_size, tagset_size, args)
+    model = utils.build_model(args, vocab_size, tagset_size)
     
     
     # load states
@@ -99,14 +105,18 @@ def main():
     if args.cuda:
         model.cuda()
     
-    y_pred = predict(model, test_loader, target_map, cuda=args.cuda)
+    y_true, y_pred = predict(model, test_loader, target_map, cuda=args.cuda)
     assert len(y_pred) == len(test_corpus), 'length of prediction is inconsistent with that of data set'
     # write result: sent_id|e1|e2|ddi|type
-    with open(args.predict_file, 'w') as f:
-        for tup, pred in zip(test_raw_corpus, y_pred):
-            ddi = 0 if pred == 'null' else 1
-            f.write('|'.join([tup.sent_id, tup.e1, tup.e2, str(ddi), pred]))
-            f.write('\n')
+    with open(args.analysis_file, 'w') as f:
+        f.write(' | '.join(['sent_id', 'e1', 'e2', 'target', 'pred']))
+        f.write('\n')
+        for tup, target, pred in zip(test_raw_corpus, y_true, y_pred):
+            if target != pred:
+                f.write(' '.join(tup.sent))
+                f.write('\n')
+                f.write(' | '.join([tup.sent_id, tup.e1, tup.e2, target, pred]))
+                f.write('\n\n')
 
 if __name__ == '__main__':
     main()
