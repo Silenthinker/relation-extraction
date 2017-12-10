@@ -118,10 +118,11 @@ def main():
         f.write(' | '.join(['target', 'sent', 'att_weight']))
         f.write('\n')
         for tup, target, pred, att_weight in zip(test_raw_corpus, y_true, y_pred, att_weights):
-            if target == pred and target != 'null':
+            if target == pred and target == 'null':
+                size = len(tup.sent)
                 f.write('{}\n'.format(target))
                 f.write('{}\n'.format(' '.join(tup.sent)))
-                f.write('{}\n\n'.format(' '.join(map(lambda x: str(round(x, 4)), att_weight))))
+                f.write('{}\n\n'.format(' '.join(map(lambda x: str(round(x, 4)), att_weight[:size]))))
 
 if __name__ == '__main__':
     main()
