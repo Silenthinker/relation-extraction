@@ -42,12 +42,13 @@ def evaluate(trainer, data_loader, t_map, cuda=False):
     for sample in chain.from_iterable(data_loader):
         target = sample['target']
         output, loss = trainer.valid_step(sample)
-        _, pred = torch.max(output.data, dim=1)
+        pred = trainer.pred_step(sample)
         if cuda:
             pred = pred.cpu() # cast back to cpu
         tot_loss += loss
         y_true.append(target.numpy().tolist())
         y_pred.append(pred.numpy().tolist())
+    
     y_true = list(chain.from_iterable(y_true))
     y_pred = list(chain.from_iterable(y_pred))
     ivt_t_map = {v:k for k, v in t_map.items()}

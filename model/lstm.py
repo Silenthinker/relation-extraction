@@ -118,3 +118,9 @@ class LSTM(nn.Module):
         output = self.linear(d_lstm_out) # output: batch_size, tagset_size
         
         return output, hidden
+    
+    def predict(self, sentence, position):
+        output, _ = self.forward(sentence, position)
+        _, pred = torch.max(output.data, dim=1)
+        
+        return pred, output

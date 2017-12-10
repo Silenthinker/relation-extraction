@@ -26,8 +26,8 @@ from sklearn.utils import shuffle
 from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.metrics import precision_score, recall_score, f1_score, classification_report
 
-from criterion import Criterion
 from data import DDI2013Dataset
+from criterion import HingeLoss
 from model.lstm import LSTM
 from model.attention_lstm import InterAttentionLSTM, AttentionPoolingLSTM
 
@@ -556,6 +556,8 @@ def build_loss(args, class_weights=None):
         criterion = nn.CrossEntropyLoss(size_average=True, weight=class_weights)
     elif args.loss == 'marginloss':
         criterion = nn.MultiMarginLoss(p=1, margin=args.margin, size_average=True, weight=class_weights)
+    elif args.loss == 'hingeloss':
+        criterion = HingeLoss(margin=1)
     else:
         raise ValueError('Unknown loss: {}'.format(args.loss))
     
@@ -573,5 +575,12 @@ def build_model(args, vocab_size, tagset_size):
         
     return model
 
-
+def distance(x, y):
+    """
+    Args:
+        x, y: Tensor/Variable, with broadcastable size
+    """
+    dist = torch.norm(x - y, p=2)
+    
+    return dist
 

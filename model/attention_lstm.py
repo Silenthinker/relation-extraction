@@ -6,6 +6,7 @@
 
 import torch
 from torch import nn
+from torch.nn.functional import normalize
 
 from model.lstm import LSTM
 
@@ -70,28 +71,24 @@ class InterAttention(nn.Module):
     """
     attention to hidden state guided by relation embedding
     """
-    def __init__(self, num_embeddings, embedding_dim, input_dim, diagonal):
+    def __init__(self, dim):
         super().__init__()
-        self.num_embeddings = num_embeddings
-        self.embedding_dim = embedding_dim
-        self.input_dim = input_dim
-        
-        assert embedding_dim == input_dim, 'embedding_dim == input_dim for diagonal bilinear matrix'
-        self.relation_embeds = nn.Parameter(torch.Tensor(embedding_dim, num_embeddings)) 
-        
+        self.w = nn.Parameter(torch.Tensor(dim, dim))
     
     def rand_init(self):
-        utils.init_weight(self.relation_embeds)
-    
-    def forward(self, input):
+        utils.init_weight(self.w)
+        
+    def forward(self, input_1, input_2):
         """
         Args:
-            input: [batch_size, seq_length, hidden_dim]
+            input_1: [batch_size, seq_length, hidden_dim]
+            input_2: [hidden_dim, tagset_size]
         """
-        batch_size = input.size(0)
-        input = input.contiguous().view(-1, self.input_dim) # [batch_size*seq_length, hidden_dim]
-        out = torch.mm(input, self.relation_embeds) # [batch_size*seq_length, num_embeddings]
-        out = out.view(batch_size, -1, self.num_embeddings)
+        batch_size, _, hidden_dim = input_1.size()
+        tagset_size = input_2.size(1)
+        input_1 = input_1.contiguous().view(-1, hidden_dim) # [batch_size*seq_length, hidden_dim]
+        out = torch.mm(torch.mm(input_1, self.w), input_2) # [batch_size*seq_length, tag_size]
+        out = out.view(batch_size, -1, tagset_size)
         out = utils.softmax(out, dim=1)
         
         return out
@@ -102,7 +99,7 @@ class AttentionPoolingLSTM(LSTM):
         self.attention = SmallIntraAttention(args.hidden_dim, args.att_hidden_dim, args.num_hops)
         self.att2out = nn.Linear(args.num_hops*args.hidden_dim, self.tagset_size, bias=True)
         self.dropout3 = nn.Dropout(p=args.dropout_ratio)
-        self.reg_params = [self.attention.w1, self.att2out]
+        self.reg_params = [self.word_embeds, self.attention.w1, self.att2out]
         
     def rand_init(self, init_embedding=False):
         """
@@ -152,13 +149,15 @@ class AttentionPoolingLSTM(LSTM):
 class InterAttentionLSTM(LSTM):
     def __init__(self, vocab_size, tagset_size, args):
         super().__init__(vocab_size, tagset_size, args)
-        self.attention = InterAttention(tagset_size, args.relation_dim, args.hidden_dim, args.diagonal)
+        self.attention = InterAttention(args.hidden_dim)
+        self.tanh = nn.Tanh()
         if args.sent_repr == 'concat':
             self.att2out = nn.Linear(args.hidden_dim*tagset_size, self.tagset_size, bias=True)
         else:
             self.att2out = nn.Linear(args.hidden_dim, self.tagset_size, bias=True)
         self.dropout3 = nn.Dropout(p=args.dropout_ratio)
-        self.reg_params = [self.attention.relation_embeds, self.att2out]
+        self.relation_embeds = nn.Parameter(torch.Tensor(args.hidden_dim, self.tagset_size)) 
+        self.reg_params = [self.word_embeds, self.relation_embeds, self.att2out]
         
     def rand_init(self, init_embedding=False):
         """
@@ -173,6 +172,7 @@ class InterAttentionLSTM(LSTM):
             utils.init_embedding(self.position_embeds.weight)
         utils.init_lstm(self.lstm)
         utils.init_linear(self.att2out)
+        utils.init_weight(self.relation_embeds)
         self.attention.rand_init()
         
     def forward(self, sentence, position, hidden=None):
@@ -195,13 +195,21 @@ class InterAttentionLSTM(LSTM):
 
         lstm_out, hidden = self.lstm(d_embeds, hidden) # lstm_out: batch_size, seq_length, hidden_dim
         d_lstm_out = self.dropout2(lstm_out)
-        att_weight = self.attention(d_lstm_out) # batch_size, seq_length, tagset_size
+        att_weight = self.attention(d_lstm_out, self.relation_embeds) # batch_size, seq_length, tagset_size
         att_weight = att_weight.transpose(1, 2) # batch_size, tagset_size, seq_length
         if self.args.sent_repr == 'concat':
             sent_repr = torch.matmul(att_weight, lstm_out).view(sentence.size(0), -1) # batch_size, tagset_size*hidden_dim
         else:
             sent_repr, _ = torch.max(torch.matmul(att_weight, lstm_out), dim=1) # [batch_size, hidden_dim]
         d_sent_repr = self.dropout3(sent_repr)
-        output = self.att2out(d_sent_repr) # output: batch_size, tagset_size
+#        output = self.att2out(d_sent_repr) # output: batch_size, tagset_size
+        n_d_sent_repr = normalize(d_sent_repr, dim=1) # [batch_size, hidden_dim]
+        n_relation_embs = normalize(self.relation_embeds, dim=0) # [hidden_dim, tagset_size]
+        scores_buffer = []
+        for i in range(self.tagset_size):
+            scores_buffer.append(torch.norm(n_d_sent_repr - n_relation_embs[:, i].contiguous().view(-1, self.hidden_dim), 2, 1)) # [batch_size, 1]
+        scores = -torch.stack(scores_buffer, dim=1)
+
+        return scores, hidden
+    
         
-        return output, hidden

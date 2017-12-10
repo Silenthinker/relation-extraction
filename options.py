@@ -6,7 +6,7 @@ build argument parser
 
 import argparse
 
-from criterion import Criterion
+import criterion
 from trainer import Trainer
 
 def get_parser(desc):
@@ -71,8 +71,8 @@ def add_optimization_args(parser):
                        help='coefficients used for computing running averages of gradient and its square (default: (0.9, 0.999))')
     group.add_argument('--class_weight', action='store_true', 
                        help='specify class weight in loss')
-    group.add_argument('--loss', default='crossentropy', choices=Criterion.CRITERION,
-                       help='loss {}'.format(', '.join(Criterion.CRITERION)))
+    group.add_argument('--loss', default='crossentropy', choices=criterion.CRITERION,
+                       help='loss {}'.format(', '.join(criterion.CRITERION)))
     group.add_argument('--margin', type=float, default=1,
                        help='margin for margin loss')
     

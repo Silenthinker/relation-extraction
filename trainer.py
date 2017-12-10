@@ -112,6 +112,14 @@ class Trainer:
         self.loss = self.criterion(output, self._sample['target'])
         
         return output, self.loss.data[0]
+    
+    def pred_step(self, sample):
+        self._prepare_sample(sample, volatile=True, cuda=self.args.cuda)
+        
+        self.model.eval()
+        pred, output = self.model.predict(self._sample['feature'], self._sample['position'])
+#        print(sample['target'], pred)
+        return pred
         
     def get_lr(self):
         return self.optimizer.param_groups[0]['lr']
