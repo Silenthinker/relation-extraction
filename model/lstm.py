@@ -123,4 +123,4 @@ class LSTM(nn.Module):
         output_dict, _ = self.forward(sentence, position, mask)
         _, pred = torch.max(output_dict['output'].data, dim=1)
         
-        return pred, output_dict
+        return output_dict, pred

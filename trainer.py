@@ -117,7 +117,7 @@ class Trainer:
         self._prepare_sample(sample, volatile=True, cuda=self.args.cuda)
         
         self.model.eval()
-        pred, output_dict = self.model.predict(self._sample['feature'], self._sample['position'], self._sample['mask'])
+        output_dict, pred = self.model.predict(self._sample['feature'], self._sample['position'], self._sample['mask'])
 #        print(sample['target'], pred)
         return output_dict, pred
         

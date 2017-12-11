@@ -42,9 +42,9 @@ def evaluate(trainer, data_loader, t_map, cuda=False):
     for sample in chain.from_iterable(data_loader):
         target = sample['target']
         _, loss = trainer.valid_step(sample)
-        pred = trainer.pred_step(sample)
+        _, pred = trainer.pred_step(sample)
         if cuda:
-            _, pred = pred.cpu() # cast back to cpu
+            pred = pred.cpu() # cast back to cpu
         tot_loss += loss
         y_true.append(target.numpy().tolist())
         y_pred.append(pred.numpy().tolist())
