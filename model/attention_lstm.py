@@ -64,10 +64,11 @@ class SmallIntraAttention(nn.Module):
             weight of input
         """
         if mask is not None:
-            mask.data = ~mask.data
+            neg_mask = mask.clone()
+            neg_mask.data = ~neg_mask.data
         out = self.tanh(input) # batch_size, seq_len, hidden_dim
         out = self.w1(out) # batch_size, seq_len, num_hops
-        att_weight = utils.softmax(out, mask=mask.view(*mask.size(), 1), dim=1)
+        att_weight = utils.softmax(out, mask=neg_mask.view(*neg_mask.size(), 1), dim=1)
         return att_weight
 
 class InterAttention(nn.Module):
@@ -81,18 +82,21 @@ class InterAttention(nn.Module):
     def rand_init(self):
         utils.init_weight(self.w)
         
-    def forward(self, input_1, input_2):
+    def forward(self, input_1, input_2, mask=None):
         """
         Args:
             input_1: [batch_size, seq_length, hidden_dim]
             input_2: [hidden_dim, tagset_size]
         """
+        if mask is not None:
+            neg_mask = mask.clone()
+            neg_mask.data = ~neg_mask.data
         batch_size, _, hidden_dim = input_1.size()
         tagset_size = input_2.size(1)
         input_1 = input_1.contiguous().view(-1, hidden_dim) # [batch_size*seq_length, hidden_dim]
         out = torch.mm(torch.mm(input_1, self.w), input_2) # [batch_size*seq_length, tag_size]
         out = out.view(batch_size, -1, tagset_size)
-        out = utils.softmax(out, dim=1)
+        out = utils.softmax(out, mask=neg_mask.view(*neg_mask.size(), 1), dim=1)
         
         return out
  
@@ -200,7 +204,7 @@ class InterAttentionLSTM(LSTM):
 
         lstm_out, hidden = self.lstm(d_embeds, hidden) # lstm_out: batch_size, seq_length, hidden_dim
         d_lstm_out = self.dropout2(lstm_out)
-        att_weight = self.attention(d_lstm_out, self.relation_embeds) # batch_size, seq_length, tagset_size
+        att_weight = self.attention(d_lstm_out, self.relation_embeds, mask) # batch_size, seq_length, tagset_size
         att_weight = att_weight.transpose(1, 2) # batch_size, tagset_size, seq_length
         if self.args.sent_repr == 'concat':
             sent_repr = torch.matmul(att_weight, lstm_out).view(sentence.size(0), -1) # batch_size, tagset_size*hidden_dim
@@ -208,13 +212,10 @@ class InterAttentionLSTM(LSTM):
             sent_repr, _ = torch.max(torch.matmul(att_weight, lstm_out), dim=1) # [batch_size, hidden_dim]
         d_sent_repr = self.dropout3(sent_repr)
 #        output = self.att2out(d_sent_repr) # output: batch_size, tagset_size
-        n_d_sent_repr = normalize(d_sent_repr, dim=1) # [batch_size, hidden_dim]
-        n_relation_embs = normalize(self.relation_embeds, dim=0) # [hidden_dim, tagset_size]
-        scores_buffer = []
-        for i in range(self.tagset_size):
-            scores_buffer.append(torch.norm(n_d_sent_repr - n_relation_embs[:, i].contiguous().view(-1, self.hidden_dim), 2, 1)) # [batch_size, 1]
-        scores = -torch.stack(scores_buffer, dim=1)
+#        n_d_sent_repr = normalize(d_sent_repr, dim=1) # [batch_size, hidden_dim]
+#        n_relation_embs = normalize(self.relation_embeds, dim=0) # [hidden_dim, tagset_size]
+        output = torch.mm(d_sent_repr, self.relation_embeds)
 
-        return {'output': scores}, hidden
+        return {'output': output}, hidden
     
         
