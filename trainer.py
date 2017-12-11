@@ -77,7 +77,7 @@ class Trainer:
             self.model.train()
             self.optimizer.zero_grad()
         
-        output_dict, _ = self.model(self._sample['feature'], self._sample['position']) 
+        output_dict, _ = self.model(self._sample['feature'], self._sample['position'], self._sample['mask']) 
         self.loss = self.criterion(output_dict['output'], self._sample['target']) # sum of losses
         if self.args.weight_decay > 0:
             self.loss += self.regularizer()
@@ -117,9 +117,9 @@ class Trainer:
         self._prepare_sample(sample, volatile=True, cuda=self.args.cuda)
         
         self.model.eval()
-        pred, output_dict = self.model.predict(self._sample['feature'], self._sample['position'])
+        pred, output_dict = self.model.predict(self._sample['feature'], self._sample['position'], self._sample['mask'])
 #        print(sample['target'], pred)
-        return pred
+        return output_dict, pred
         
     def get_lr(self):
         return self.optimizer.param_groups[0]['lr']

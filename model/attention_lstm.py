@@ -55,16 +55,19 @@ class SmallIntraAttention(nn.Module):
     def rand_init(self):
         utils.init_linear(self.w1)
         
-    def forward(self, input):
+    def forward(self, input, mask=None):
         """
         Args:
             input: batch_size, seq_len, hidden_dim
+            mask: None or [batch_size, seq_len]
         Return:
             weight of input
         """
+        if mask is not None:
+            mask.data = ~mask.data
         out = self.tanh(input) # batch_size, seq_len, hidden_dim
         out = self.w1(out) # batch_size, seq_len, num_hops
-        att_weight = utils.softmax(out, dim=1)
+        att_weight = utils.softmax(out, mask=mask.view(*mask.size(), 1), dim=1)
         return att_weight
 
 class InterAttention(nn.Module):
@@ -117,12 +120,12 @@ class AttentionPoolingLSTM(LSTM):
         self.attention.rand_init()
         self.att_weight = None
         
-    def forward(self, sentence, position, hidden=None):
+    def forward(self, sentence, position, mask=None, hidden=None):
         '''
         args:
             sentence (batch_size, word_seq_len) : word-level representation of sentence
             hidden: initial hidden state
-
+            mask: None or [batch_size, seq_len]
         return:
             output (batch_size, tag_size), hidden
         '''
@@ -139,7 +142,7 @@ class AttentionPoolingLSTM(LSTM):
         ## TODO: dropout or not?
         d_lstm_out = self.dropout2(lstm_out)
 #        d_lstm_out = lstm_out
-        att_weight = self.attention(d_lstm_out) # batch_size, seq_length, num_hops
+        att_weight = self.attention(d_lstm_out, mask) # batch_size, seq_length, num_hops
         att_weight = att_weight.transpose(1, 2) # batch_size, num_hops, seq_length
         self.att_weight = att_weight[:, 0, :]
         sent_repr = torch.matmul(att_weight, lstm_out).view(sentence.size(0), -1) # batch_size, num_hops*hidden_dim
@@ -177,7 +180,7 @@ class InterAttentionLSTM(LSTM):
         utils.init_weight(self.relation_embeds)
         self.attention.rand_init()
         
-    def forward(self, sentence, position, hidden=None):
+    def forward(self, sentence, position, mask=None, hidden=None):
         '''
         args:
             sentence (batch_size, word_seq_len) : word-level representation of sentence

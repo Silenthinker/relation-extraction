@@ -166,7 +166,6 @@ def generate_sentences_per_doc(root, position=False):
             elif not sent or word.etype != sent[-1]: # replace consecutive terms into a single one
                 sent.append(word.etype)
         sent = ' '.join(sent)
-
         # for each pair of mentions, generate a sentence
         for pair in sent_elem.findall('pair'):
             sent_blind = sent
@@ -189,6 +188,9 @@ def generate_sentences_per_doc(root, position=False):
                 sent_blind = sent_blind.replace(eid, new, 1)
             # tokenize
             sent_blind = nltk.word_tokenize(sent_blind)
+            # remove last .
+            if sent_blind[-1] == '.':
+                sent_blind.pop()
             # ensure there is a pair of mentions
             if 'DRUG1' not in sent_blind or 'DRUG2' not in sent_blind:
                 continue
@@ -352,7 +354,7 @@ def construct_bucket_dataloader(input_features, input_targets, pad_feature, batc
         
     # encode and padding
     thresholds = calc_threshold_mean(input_features)
-    buckets = [[[], [], [], []] for _ in range(len(thresholds))] # [[w_feature, p_feature, idx]]
+    buckets = [[[], [], [], [], []] for _ in range(len(thresholds))] # [[w_feature, target, p_feature, idx, mask]]
     for i, (feature, target) in enumerate(zip(input_features, input_targets)):
         assert len(feature) % 3 == 0, 'len(feature) % 3 != 0'
         cur_len = len(feature) // 3
@@ -368,7 +370,8 @@ def construct_bucket_dataloader(input_features, input_targets, pad_feature, batc
         buckets[idx][2].append(pad_position(p1_feature, thresholds[idx], cur_len, position_bound) +
                pad_position(p2_feature, thresholds[idx], cur_len, position_bound))
         buckets[idx][3].append(i)
-    bucket_dataset = [DDI2013Dataset(torch.LongTensor(bucket[0]), torch.LongTensor(bucket[1]), torch.LongTensor(bucket[2]), bucket[3])
+        buckets[idx][4].append([1] * cur_len + [0] * (thresholds[idx] - cur_len))
+    bucket_dataset = [DDI2013Dataset(torch.LongTensor(bucket[0]), torch.LongTensor(bucket[1]), torch.LongTensor(bucket[2]), bucket[3], torch.ByteTensor(bucket[4]))
                       for bucket in buckets]
     dataset_loader = [torch.utils.data.DataLoader(tup, batch_size, shuffle=is_train, drop_last=False) for tup in bucket_dataset]
     return dataset_loader
@@ -499,13 +502,22 @@ def evaluate(y_true, y_pred, labels=None, target_names=None):
 #    print(classification_report(y_true, y_pred, labels=labels, target_names=target_names))
     return precision, recall, f1
     
-def softmax(input, dim=1):
+def softmax(input, mask=None, dim=1):
+    """
+    compute softmax for input; set inf to maskout elements
+    input: [d0, d1, d2, ..., d_n-1]
+    mask: [d0, 1, 1, d_dim, ..., 1]
+    """
+    
     input_size = input.size()
+    
+    if mask is not None:
+        input.masked_fill_(mask, -float('inf'))
     
     trans_input = input.transpose(dim, len(input_size)-1)
     trans_size = trans_input.size()
 
-    input_2d = trans_input.contiguous().view(-1, trans_size[-1])
+    input_2d = trans_input.contiguous().view(-1, trans_size[-1]) # [..., d_dim]
     
     soft_max_2d = F.softmax(input_2d)
     
@@ -530,7 +542,8 @@ def prepare_sample(sample, volatile=False, cuda=False):
             'feature': make_variable(sample['feature'], cuda=cuda, volatile=volatile), 
             'position': make_variable(sample['position'], cuda=cuda, volatile=volatile), 
             'target': make_variable(sample['target'], cuda=cuda, volatile=volatile).view(-1),
-            'size': len(sample['index'])
+            'size': len(sample['index']),
+            'mask': make_variable(sample['mask'], cuda=cuda, volatile=volatile),
             }
 
 def get_class_weights(l):

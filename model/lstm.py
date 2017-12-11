@@ -92,7 +92,7 @@ class LSTM(nn.Module):
         hook = utils.update_part_embedding(indices, self.args.cuda)
         self.word_embeds.weight.register_hook(hook)
         
-    def forward(self, sentence, position, hidden=None):
+    def forward(self, sentence, position, mask=None, hidden=None):
         '''
         args:
             sentence (batch_size, word_seq_len) : word-level representation of sentence
@@ -119,8 +119,8 @@ class LSTM(nn.Module):
         
         return {'output' :output}, hidden
     
-    def predict(self, sentence, position):
-        output_dict, _ = self.forward(sentence, position)
+    def predict(self, sentence, position, mask=None):
+        output_dict, _ = self.forward(sentence, position, mask)
         _, pred = torch.max(output_dict['output'].data, dim=1)
         
         return pred, output_dict

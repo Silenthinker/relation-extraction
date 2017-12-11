@@ -122,7 +122,9 @@ def add_generation_args(parser):
     group = parser.add_argument_group('Generation')
     group.add_argument('--predict_file', default='../../data/drugddi2013/re/task9.2_GROUP_1.txt', 
                        help='path to output predicted result')
-    group.add_argument('--analysis_file', default='../../data/drugddi2013/re/analysis.txt', 
+    group.add_argument('--att_file', default='../../data/drugddi2013/re/att_scores.txt',
+                       help='path to attention scores file')
+    group.add_argument('--error_file', default='../../data/drugddi2013/re/error.txt', 
                        help='path to analysis')
     
     return group
