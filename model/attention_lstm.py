@@ -77,7 +77,7 @@ class InterAttention(nn.Module):
     """
     def __init__(self, dim):
         super().__init__()
-        self.w = nn.Parameter(torch.Tensor(dim, dim))
+        self.w = nn.Parameter(torch.Tensor(1, dim)) # parametrise diagonal matrix
     
     def rand_init(self):
         utils.init_weight(self.w)
@@ -94,7 +94,8 @@ class InterAttention(nn.Module):
         batch_size, _, hidden_dim = input_1.size()
         tagset_size = input_2.size(1)
         input_1 = input_1.contiguous().view(-1, hidden_dim) # [batch_size*seq_length, hidden_dim]
-        out = torch.mm(torch.mm(input_1, self.w), input_2) # [batch_size*seq_length, tag_size]
+        out = input_1 * self.w
+        out = torch.mm(out, input_2) # [batch_size*seq_length, tag_size]
         out = out.view(batch_size, -1, tagset_size)
         out = utils.softmax(out, mask=neg_mask.view(*neg_mask.size(), 1), dim=1)
         
