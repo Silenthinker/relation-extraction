@@ -130,7 +130,9 @@ def main():
             if target != pred:
                 size = len(tup.sent)
                 f.write('{}\n'.format(' '.join(tup.sent)))
-                f.write('{}\n'.format(' '.join(map(lambda x: str(round(x, 4)), att_weight[:size]))))
+                if args.model == 'InterAttentionLSTM':
+                    for i in range(len(att_weight)):
+                        f.write('{}\n'.format(' '.join(map(lambda x: str(round(x, 4)), att_weight[i][:size]))))
                 f.write('{}\n\n'.format(' | '.join([tup.sent_id, tup.e1, tup.e2, target, pred])))
             
     # attention
@@ -143,7 +145,9 @@ def main():
                 size = len(tup.sent)
                 f.write('{}\n'.format(target))
                 f.write('{}\n'.format(' '.join(tup.sent)))
-                f.write('{}\n\n'.format(' '.join(map(lambda x: str(round(x, 4)), att_weight[:size]))))
+                if args.model == 'InterAttentionLSTM':
+                    for i in range(len(att_weight)):
+                        f.write('{}\n'.format(' '.join(map(lambda x: str(round(x, 4)), att_weight[i][:size]))))
 
 if __name__ == '__main__':
     main()

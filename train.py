@@ -106,35 +106,6 @@ def main():
     caseless = args.caseless
     batch_size = args.batch_size
     num_epoch = args.num_epoch
-    """
-    train_corpus = [
-        (['This', 'causes', 'an', 'increase', '.'], 'effect'), 
-        (['It', 'is', 'recommended', 'to', 'do', '.'], 'int'),
-        (['This', 'causes', 'an', 'increase', '.'], 'effect'), 
-        (['It', 'is', 'recommended', 'to', 'do', '.'], 'int'),
-        (['This', 'causes', 'an', 'increase', '.'], 'effect'), 
-        (['It', 'is', 'recommended', 'to', 'do', '.'], 'int'),
-        (['This', 'causes', 'an', 'increase', '.'], 'effect'), 
-        (['It', 'is', 'recommended', 'to', 'do', '.'], 'int'),
-        (['This', 'causes', 'an', 'increase', '.'], 'effect'), 
-        (['It', 'is', 'recommended', 'to', 'do', '.'], 'int'),
-        (['This', 'causes', 'an', 'increase', '.'], 'effect'), 
-        (['It', 'is', 'recommended', 'to', 'do', '.'], 'int'),
-        (['This', 'causes', 'an', 'increase', '.'], 'effect'), 
-        (['It', 'is', 'recommended', 'to', 'do', '.'], 'int'),
-        (['This', 'causes', 'an', 'increase', '.'], 'effect'), 
-        (['It', 'is', 'recommended', 'to', 'do', '.'], 'int'),
-        (['This', 'causes', 'an', 'increase', '.'], 'effect'), 
-        (['It', 'is', 'recommended', 'to', 'do', '.'], 'int'),
-        (['This', 'causes', 'an', 'increase', '.'], 'effect'), 
-        (['It', 'is', 'recommended', 'to', 'do', '.'], 'int'),
-        (['This', 'causes', 'an', 'increase', '.'], 'effect'), 
-        (['It', 'is', 'recommended', 'to', 'do', '.'], 'int'),
-        (['This', 'causes', 'an', 'increase', '.'], 'effect'), 
-        (['It', 'is', 'recommended', 'to', 'do', '.'], 'int'),
-        ]
-    """
-    
     
     # preprocessing
     sents = [tup[0] for tup in train_corpus]

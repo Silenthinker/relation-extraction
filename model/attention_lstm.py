@@ -183,6 +183,7 @@ class InterAttentionLSTM(LSTM):
         utils.init_linear(self.att2out)
         utils.init_weight(self.relation_embeds)
         self.attention.rand_init()
+        self.att_weight = None
         
     def forward(self, sentence, position, mask=None, hidden=None):
         '''
@@ -206,6 +207,7 @@ class InterAttentionLSTM(LSTM):
         d_lstm_out = self.dropout2(lstm_out)
         att_weight = self.attention(d_lstm_out, self.relation_embeds, mask) # batch_size, seq_length, tagset_size
         att_weight = att_weight.transpose(1, 2) # batch_size, tagset_size, seq_length
+        self.att_weight = att_weight
         if self.args.sent_repr == 'concat':
             sent_repr = torch.matmul(att_weight, lstm_out).view(sentence.size(0), -1) # batch_size, tagset_size*hidden_dim
         else:
@@ -216,6 +218,6 @@ class InterAttentionLSTM(LSTM):
 #        n_relation_embs = normalize(self.relation_embeds, dim=0) # [hidden_dim, tagset_size]
         output = torch.mm(d_sent_repr, self.relation_embeds)
 
-        return {'output': output}, hidden
+        return {'output': output, 'att_weight': self.att_weight}, hidden
     
         

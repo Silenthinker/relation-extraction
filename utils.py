@@ -338,7 +338,8 @@ def calc_threshold_mean(features):
         upper_average = None
     max_len = max(lines_len)
     max_len = None if max_len == upper_average else max_len
-    return [line_len for line_len in [lower_average, average, upper_average, max_len] if line_len]
+    thresholds = [line_len for line_len in [lower_average, average, upper_average, max_len] if line_len]
+    return sorted(list(set(thresholds)))
 
 def construct_bucket_dataloader(input_features, input_targets, pad_feature, batch_size, position_bound, is_train=True):
     """
