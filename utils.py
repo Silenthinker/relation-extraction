@@ -585,6 +585,9 @@ def build_model(args, vocab_size, tagset_size):
         model = AttentionPoolingLSTM(vocab_size, tagset_size, args)
     elif args.model == 'lstm':
         model = LSTM(vocab_size, tagset_size, args)
+    elif args.model == 'AttentionLSTM':
+        from model.attention_lstm_old import AttentionLSTM
+        model = AttentionLSTM(vocab_size, tagset_size, args)
     else:
         raise ValueError('Unknown model {}'.format(args.model))
         
