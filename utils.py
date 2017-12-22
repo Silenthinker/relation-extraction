@@ -568,7 +568,7 @@ def get_class_weights(l):
 
 def build_loss(args, class_weights=None):
     if args.loss == 'crossentropy':
-        criterion = nn.CrossEntropyLoss(size_average=True, weight=class_weights)
+        criterion = nn.CrossEntropyLoss(weight=class_weights)
     elif args.loss == 'marginloss':
         criterion = nn.MultiMarginLoss(p=1, margin=args.margin, size_average=True, weight=class_weights)
     elif args.loss == 'hingeloss':
@@ -585,9 +585,6 @@ def build_model(args, vocab_size, tagset_size):
         model = AttentionPoolingLSTM(vocab_size, tagset_size, args)
     elif args.model == 'lstm':
         model = LSTM(vocab_size, tagset_size, args)
-    elif args.model == 'AttentionLSTM':
-        from model.attention_lstm_old import AttentionLSTM
-        model = AttentionLSTM(vocab_size, tagset_size, args)
     else:
         raise ValueError('Unknown model {}'.format(args.model))
         
