@@ -18,14 +18,10 @@ def get_parser(desc):
 
 def add_dataset_args(parser):
     group = parser.add_argument_group('Dataset and data loading')
-    group.add_argument('--train_corpus_path', default='../../data/drugddi2013/re/train', 
-                       help='path to original train corpus')
-    group.add_argument('--test_corpus_path', default='../../data/drugddi2013/re/test', 
-                       help='path to original test corpus')
-    group.add_argument('--train_path', default='../../data/drugddi2013/re/train.ddi', 
-                       help='path to train data')
-    group.add_argument('--test_path', default='../../data/drugddi2013/re/test.ddi', 
-                       help='path to test data')
+    group.add_argument('--raw_dir', default='../../data/re/drugddi2013/raw', 
+                       help='raw corpus directory')
+    group.add_argument('--processed_dir', default='../../data/re/drugddi2013/processed', 
+                       help='processed data directory')
     group.add_argument('--emb_file', default='', help='path to load pretrained word embedding')
     group.add_argument('--batch_size', type=int, default=128, 
                        help='batch size')
@@ -42,6 +38,10 @@ def add_preprocessing_args(parser):
                        help='use position feature')
     group.add_argument('--min_count', type=int, default=3, 
                        help='exclude words with frequency less than min count')
+    group.add_argument('--const', action='store_true',
+                       help='parse with constituency parser')
+    group.add_argument('--dep', action='store_true',
+                       help='parse with dependency parser')
     
     return group
 

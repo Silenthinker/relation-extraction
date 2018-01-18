@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import os
-import re
 import json
 import math
-import glob
-import argparse
-import xml.etree.ElementTree as ET
 from tqdm import tqdm
 from collections import Counter
 
@@ -16,17 +12,14 @@ import torch.nn.init
 import torch.nn.functional as F
 
 from itertools import chain
-from collections import Counter, namedtuple
 from operator import itemgetter
-
-import nltk
 
 import numpy as np
 from sklearn.utils import shuffle
-from sklearn.model_selection import StratifiedShuffleSplit
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import precision_score, recall_score, f1_score, classification_report
 
-from data import DDI2013Dataset
+from data.ddi2013 import DDI2013Dataset
 from criterion import HingeLoss
 from model.lstm import LSTM
 from model.attention_lstm import InterAttentionLSTM, AttentionPoolingLSTM
@@ -44,206 +37,11 @@ from model.attention_lstm import InterAttentionLSTM, AttentionPoolingLSTM
 
 ## TODO: tokenization and remove punctuations which are not part of entity mentions
 
-# p1, p2 are relative positions w.r.t. two drug entity mentions
-SingleLine = namedtuple('SingleLine', 'sent_id pair_id e1 e2 ddi type sent p1 p2')
-
-class Word:
-    def __init__(self, index, text, etype):
-        self.index = index
-        self.text = text
-        self.etype = etype
-    
-    def __repr__(self):
-        return '[index: {}, text: {}, etype: {}]'.format(self.index, self.text, self.etype)
-    
-    __str__ = __repr__
-        
-
-def parse_charoffset(charoffset):
-    """
-    Parse charoffset to a tuple containing start and end indices.
-    Example:
-        charoffset = '3-7;8-9'
-        
-        [[3, 7], [8, 9]]
-    """
-    # try split by ';'
-    charoffsets = charoffset.split(';')
-    return [[int(x.strip()) for x in offset.split('-')] for offset in charoffsets]
-    """
-    if ';' in charoffset:
-        print('Invalid char offset: {}'.format(charoffset))
-        return []
-    else:
-        return [int(x.strip()) for x in charoffset.split('-')]
-    """
-    
-def parse_sentence(sent):
-    """
-    Parse sentence to get a list of Word class
-    Example:
-        sent = 'it is it'
-        print(parse_sentence(sent))
-        
-        [(0, 'it', 'O'), (3, 'is', 'O'), (6, 'it', 'O')]
-    """
-    sent = sent.strip()
-    res = []
-    if len(sent) == 0:
-        return res
-    i = j = 0
-    while j <= len(sent):
-        if j < len(sent) and sent[j] != ' ':
-            j += 1
-        else:
-            if j > i: # in case where two spaces are adjacent
-                res.append(Word(i, sent[i:j], 'null'))
-            i = j + 1
-            j = i
-    return res
-
-def tag_word(words, charOffset, eid):
-    """
-    Args:
-        entity: dict has keys charOffset, type, text
-    Tag Word with entity type in-place
-    Example:
-        words = [(0, 'it(', 'O'), (4, 'is', 'O'), (7, 'it', 'O')]
-        entity = {'charOffset': [0, 1], 'type': 'eng'} # [inclusive, exclusive]
-        print(tag_word(words, entity))
-        
-        [(0, 'it', 'B-ENG'), (2, (, 'O'), (4, 'is', 'O'), (7, 'it', 'O')]
-    """
-    beg, end = charOffset
-    end += 1
-    res = []
-    for i, word in enumerate(words):
-        if word.index < end and word.index + len(word.text) - 1 >= beg:
-            # if there is overlap between char offset and this word
-            # tag word
-            len_word = len(word.text)
-            if word.index < beg:
-                head = Word(word.index, word.text[:beg-word.index], 'null')
-                res.append(head)
-            mention = Word(beg, word.text[beg-word.index:min(len_word, end-word.index)], eid)
-            res.append(mention)
-            if word.index + len_word > end:
-                tail = Word(end, word.text[end-word.index:len_word], 'null')
-                res.append(tail)
-        else:
-            res.append(word)
-    return res
-
-def generate_sentences_per_doc(root, position=False):
-    """
-    Args:
-        root: root Element of XML
-    """
-    for sent_elem in root.findall('sentence'):
-        eids = []
-        words = parse_sentence(sent_elem.get('text'))
-        # tag words with entity id
-        for entity in sent_elem.findall('entity'):
-            attributes = entity.attrib
-            eids.append(attributes['id'])
-            charOffset = attributes['charOffset']
-            parsed_charoffsets = parse_charoffset(charOffset)
-            # in some cases, charOffset is in form of xx-xx;xx-xx, we simply take the first part
-            words = tag_word(words, parsed_charoffsets[0], attributes['id'])
-            if len(parsed_charoffsets) > 1:
-                segment = []
-                for charoffset in parsed_charoffsets:
-                    segment.append(sent_elem.get('text')[charoffset[0]:charoffset[1]+1])
-                print('---------------------')
-                print(sent_elem.get('text'))
-                print(' '.join(segment))
-        
-        # replace mention with id        
-        sent = []
-        for word in words:
-            if word.etype == 'null':
-                sent.append(word.text)
-            elif not sent or word.etype != sent[-1]: # replace consecutive terms into a single one
-                sent.append(word.etype)
-        sent = ' '.join(sent)
-        # for each pair of mentions, generate a sentence
-        for pair in sent_elem.findall('pair'):
-            sent_blind = sent
-            attributes = pair.attrib
-            # entity blinding
-            e1 = attributes['e1']
-            e2 = attributes['e2']
-            try:
-                etype = 'null' if attributes['ddi'] == 'false' else attributes['type']
-            except KeyError:
-                print('ddi is true but no type is provided')
-                continue
-            for eid in eids:
-                if eid == e1:
-                    new = 'DRUG1'
-                elif eid == e2:
-                    new = 'DRUG2'
-                else:
-                    new = 'DRUG0'
-                sent_blind = sent_blind.replace(eid, new, 1)
-            # tokenize
-            sent_blind = nltk.word_tokenize(sent_blind)
-            # remove last .
-            if sent_blind[-1] == '.':
-                sent_blind.pop()
-            # ensure there is a pair of mentions
-            if 'DRUG1' not in sent_blind or 'DRUG2' not in sent_blind:
-                continue
-            p1 = ''
-            p2 = ''
-            if position:
-                try:
-                    _p1 = sent_blind.index('DRUG1')
-                    _p2 = sent_blind.index('DRUG2')
-                except:
-                    print(sent)
-                    print(words)
-                    print(e1, e2)
-                    raise ValueError
-                len_sent = len(sent_blind)
-                p1 = [i - _p1 for i in range(0, len_sent)]
-                p2 = [i - _p2 for i in range(0, len_sent)]
-            yield SingleLine(sent_elem.get('id'), attributes['id'], e1, e2, attributes['ddi'], etype, sent_blind, p1, p2)
-
-def preprocess_ddi(data_path='../../data/drugddi2013/re/train', output_path='../../data/drugddi2013/re/train.ddi', position=False):
-    """
-    Preprocess ddi data as follows:
-    For each document
-        For each sentence in the document
-            For each pair in the sentence
-                Construct the following line: sent_id|pair_id|e1|e2|ddi|type|sent|p1|p2
-
-    Return:
-        res: list of tuples
-    """
-    def encode_int_list(l):
-        """
-        encode integer list to string with space as delimiter
-        """
-        return ' '.join([str(i) for i in l])
-    
-    res = []
-    file_pattern = os.path.join(data_path, '*.xml')
-    with open(output_path, 'w') as fo:
-        for f in glob.glob(file_pattern):
-            print('Processing: {}...'.format(f))
-            # import xml data into ElementTree
-            tree = ET.parse(f)
-            root = tree.getroot()
-            for single_line in generate_sentences_per_doc(root, position=position):
-                res.append(single_line)
-                sent = single_line.sent
-                single_line = single_line._replace(sent=' '.join(sent), p1=encode_int_list(single_line.p1), p2=encode_int_list(single_line.p2))
-                fo.write('|'.join(single_line))
-                fo.write('\n')
-    print('Done')
-    return res
-
+def make_dirs(dirs):
+    for d in dirs:
+        if not os.path.exists(d):
+            os.makedirs(d)
+            
 def build_vocab(sents, min_count=5, caseless=True):
     """
     Args:
@@ -275,13 +73,13 @@ def build_features(raw_features, mapping, caseless=True):
         return mapping.get(w, mapping['UNK'])
     return [list(map(lambda w:encode(w, mapping, caseless), sent)) for sent in raw_features]
 
-def build_targets(raw_targets, mapping):
+def map_iterable(iterable, mapping):
     """
     Args:
-        raw_targets: [str]
-        mapping: dict mappping from string to index
+        iterable: iterable
+        mapping: dict
     """
-    return [mapping[target] for target in raw_targets]
+    return [mapping[k] for k in iterable]
 
 def build_corpus(raw_corpus, feature_mapping, target_mapping, caseless):
     """
@@ -295,13 +93,13 @@ def build_corpus(raw_corpus, feature_mapping, target_mapping, caseless):
     features = build_features(raw_features, feature_mapping, caseless)
     raw_positions = [chain.from_iterable([tup[2], tup[3]]) for tup in raw_corpus]
     features = [list(chain.from_iterable([f, p])) for f, p in zip(features, raw_positions)]
-    targets = build_targets(raw_targets, target_mapping)
+    targets = map_iterable(raw_targets, target_mapping)
     return features, targets
 
 def stratified_shuffle_split(features, targets, train_size=0.9):
     """
     Args:
-        inputs: [[int]]
+        inputs: list
         targets: [int]
     Return:
         (train_features, train_targets), (val_features, val_targets)
@@ -311,14 +109,23 @@ def stratified_shuffle_split(features, targets, train_size=0.9):
         numpy array to list
         """
         return array.tolist()
-    X = np.array(features)
+
+    X = np.arange(len(targets)) # serve as indices    
     y = np.array(targets)    
-    sss = StratifiedShuffleSplit(n_splits=1, train_size=train_size, random_state=0)
-    for train_index, val_index in sss.split(X, y):
-        train_features, train_targets = X[train_index], y[train_index]
-        val_features, val_targets = X[val_index], y[val_index]
-        break
-    return np2list(train_features), np2list(train_targets), np2list(val_features), np2list(val_targets)
+    train_index, val_index, _, _ = train_test_split(X, y, train_size=train_size, random_state=5)
+    
+    # split features
+    train_features = []
+    val_features = []
+    for i in train_index:
+        train_features.append(features[i])
+    for i in val_index:
+        val_features.append(features[i])
+    
+    #split targets
+    train_targets = y[train_index]
+    val_targets = y[val_index]
+    return train_features, np2list(train_targets), val_features, np2list(val_targets)
 
 def calc_threshold_mean(features):
     """
@@ -463,6 +270,8 @@ def save_checkpoint(state, track_list, filename):
         json.dump(track_list, f)
     torch.save(state, filename + '.model')
 
+'''
+# possibly deprecated
 def load_corpus(train_path, test_path):
     """
     load ddi corpus
@@ -487,6 +296,7 @@ def load_corpus(train_path, test_path):
             print(inst)
         return corpus    
     return load_file(train_path), load_file(test_path)
+'''
     
 def evaluate(y_true, y_pred, labels=None, target_names=None):
     """
