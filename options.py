@@ -7,7 +7,7 @@ build argument parser
 import argparse
 
 import criterion
-from trainer import Trainer
+from trainer import BasicTrainer
 
 def get_parser(desc):
     parser = argparse.ArgumentParser(description='Relation Extraction Toolkit -- ' + desc)
@@ -47,10 +47,10 @@ def add_preprocessing_args(parser):
 
 def add_optimization_args(parser):
     group = parser.add_argument_group('Optimization')
-    group.add_argument('--optimizer', default='nag', choices=Trainer.OPTIMIZERS,
-                       help='optimizer {}'.format(', '.join(Trainer.OPTIMIZERS)))
-    group.add_argument('--lr_scheduler', default='lambdalr', choices=Trainer.LR_SCHEDULER,
-                       help='lr scheduler {}'.format(', '.join(Trainer.LR_SCHEDULER)))
+    group.add_argument('--optimizer', default='nag', choices=BasicTrainer.OPTIMIZERS,
+                       help='optimizer {}'.format(', '.join(BasicTrainer.OPTIMIZERS)))
+    group.add_argument('--lr_scheduler', default='lambdalr', choices=BasicTrainer.LR_SCHEDULER,
+                       help='lr scheduler {}'.format(', '.join(BasicTrainer.LR_SCHEDULER)))
     group.add_argument('--lr', type=float, default=0.25, 
                        help='learning rate')
     group.add_argument('--lr_decay', type=float, default=0.5, 

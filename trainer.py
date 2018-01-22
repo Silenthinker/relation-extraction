@@ -7,10 +7,10 @@ import torch
 from torch.autograd import Variable
 from torch.optim.lr_scheduler import LambdaLR, ReduceLROnPlateau
 
-import utils
+from utils import make_variable
 from regularizer import Regularizer
 
-class Trainer:
+class BasicTrainer:
     
     OPTIMIZERS = ['adagrad', 'adam', 'nag', 'sgd']
     LR_SCHEDULER = ['lambdalr', 'rop'] # rop: ReduceLROnPlateau
@@ -71,18 +71,7 @@ class Trainer:
         return self.model
             
     def _forward(self, eval=False):
-        if eval:
-            self.model.eval()
-        else:
-            self.model.train()
-            self.optimizer.zero_grad()
-        
-        output_dict, _ = self.model(self._sample['feature'], self._sample['position'], self._sample['mask']) 
-        self.loss = self.criterion(output_dict['output'], self._sample['target']) # sum of losses
-        if self.args.weight_decay > 0:
-            self.loss += self.regularizer()
-        
-        return output_dict
+        raise NotImplementedError("Please implement this method")
     
     def _backward_and_opt(self):
         if self.loss is not None:
@@ -104,6 +93,45 @@ class Trainer:
         
     
     def valid_step(self, sample):
+        raise NotImplementedError("Please implement this method")
+    
+    def pred_step(self, sample):
+        raise NotImplementedError("Please implement this method")
+        
+    def get_lr(self):
+        return self.optimizer.param_groups[0]['lr']
+    
+    def lr_step(self, val_loss=None, epoch=None):
+        if self.args.lr_scheduler == 'rop':
+            self.lr_scheduler.step(val_loss, epoch)
+        else:
+            self.lr_scheduler.step(epoch)
+        
+        return self.optimizer.param_groups[0]['lr']
+    
+    def _prepare_sample(self, sample, volatile, cuda):
+        raise NotImplementedError("Please implement this method")
+        
+class SeqTrainer(BasicTrainer):
+    
+    def __init__(self, args, model, criterion):
+        super().__init__(args, model, criterion)
+        
+    def _forward(self, eval=False):
+        if eval:
+            self.model.eval()
+        else:
+            self.model.train()
+            self.optimizer.zero_grad()
+        
+        output_dict, _ = self.model(self._sample['feature'], self._sample['position'], self._sample['mask']) 
+        self.loss = self.criterion(output_dict['output'], self._sample['target']) # sum of losses
+        if self.args.weight_decay > 0:
+            self.loss += self.regularizer()
+        
+        return output_dict
+    
+    def valid_step(self, sample):
         # prepare sample
         self._prepare_sample(sample, volatile=True, cuda=self.args.cuda)
         
@@ -120,19 +148,87 @@ class Trainer:
         output_dict, pred = self.model.predict(self._sample['feature'], self._sample['position'], self._sample['mask'])
 #        print(sample['target'], pred)
         return output_dict, pred
-        
-    def get_lr(self):
-        return self.optimizer.param_groups[0]['lr']
-    
-    def lr_step(self, val_loss=None, epoch=None):
-        if self.args.lr_scheduler == 'rop':
-            self.lr_scheduler.step(val_loss, epoch)
-        else:
-            self.lr_scheduler.step(epoch)
-        
-        return self.optimizer.param_groups[0]['lr']
     
     def _prepare_sample(self, sample, volatile, cuda):
-        self._sample = utils.prepare_sample(sample, volatile=volatile, cuda=cuda)
+        self._sample = {
+                'index': make_variable(sample['index'], cuda=False, volatile=volatile),
+                'feature': make_variable(sample['feature'], cuda=cuda, volatile=volatile), 
+                'position': make_variable(sample['position'], cuda=cuda, volatile=volatile), 
+                'target': make_variable(sample['target'], cuda=cuda, volatile=volatile).view(-1),
+                'size': len(sample['index']),
+                'mask': make_variable(sample['mask'], cuda=cuda, volatile=volatile),
+                }
+
+class TreeTrainer(BasicTrainer):
+    def __init__(self, args, model, criterion):
+        super().__init__(args, model, criterion)
+        self.batch_size = args.batch_size
         
+    def _forward(self, eval=False):
+        if eval:
+            self.model.eval()
+        else:
+            self.model.train()
+            self.optimizer.zero_grad()
+            
+        self.loss = 0
         
+        res = {}
+        for feature, tree, target in zip(self._sample['feature'], self._sample['tree'], self._sample['target']):
+            # item is dict
+            output_dict, _ = self.model(tree, feature)
+            self.loss += self.criterion(output_dict['output'], target)
+            # [dict] to dict[list]
+            if not res:
+                res = {k:[v] for k, v in output_dict.items()}
+            else:
+                [res[k].append(v) for k, v in output_dict.items()]
+                
+        self.loss /= self.batch_size
+        
+        if self.args.weight_decay > 0:
+            self.loss += self.regularizer()
+        
+        res['output'] = torch.cat(res['output'], dim=0)
+        return res
+    
+    def valid_step(self, sample):
+        # prepare sample
+        self._prepare_sample(sample, volatile=True, cuda=self.args.cuda)
+        
+        # forward
+        output_dict = self._forward(eval=True)
+        self.loss = self.criterion(output_dict['output'], self._sample['target'])
+        
+        return self.loss.data[0]
+    
+    def pred_step(self, sample):
+        
+        self._prepare_sample(sample, volatile=True, cuda=self.args.cuda)
+        
+        self.model.eval()
+        
+        res = []
+        for feature, tree in zip(self._sample['feature'], self._sample['tree']):
+            _, pred = self.model.predict(tree, feature)
+            res.append(pred)
+#        print(sample['target'], pred)
+        return torch.stack(res, dim=0)
+    
+    def _prepare_sample(self, sample, volatile, cuda):
+        """
+        Args:
+            sample: dict of list
+        
+        self._sample:
+            dict:
+                feature: [Var(LongTensor)]
+                target: Var(LongTensor)
+                tree: [Tree]
+        """
+        def helper(k):
+           sample[k] = [make_variable(item, cuda=cuda, volatile=volatile) for item in sample[k]]
+        self._sample = {}
+        self._sample['feature'] = [make_variable(item, cuda=cuda, volatile=volatile) for item in sample['feature']]
+        self._sample['target'] = make_variable(sample['target'], cuda=cuda, volatile=volatile).view(-1)
+        self._sample['tree'] = sample['tree']

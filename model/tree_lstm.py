@@ -105,5 +105,6 @@ class RelationTreeLSTM(nn.Module):
     def predict(self, tree, inputs):
         output_dict, _ = self.forward(tree, inputs)
         _, pred = torch.max(output_dict['output'].data, dim=1)
+        # TODO: check dimensionality
         
         return output_dict, pred

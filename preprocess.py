@@ -159,7 +159,6 @@ def main():
     test_dir = os.path.join(processed_dir, 'test')
     utils.make_dirs([args.processed_dir, lib_dir, train_dir, val_dir, test_dir])
     
-    '''
     # preprocess
     train_corpus = ddi2013.preprocess_ddi(os.path.join(args.raw_dir, 'train'), position=True)
     test_corpus = ddi2013.preprocess_ddi(os.path.join(args.raw_dir, 'test'), position=True)
@@ -176,14 +175,15 @@ def main():
     ddi2013.write_to_file(train_corpus, os.path.join(args.processed_dir, 'train.ddi'))
     ddi2013.write_to_file(val_corpus, os.path.join(args.processed_dir, 'val.ddi'))
     ddi2013.write_to_file(test_corpus, os.path.join(args.processed_dir, 'test.ddi'))
-    '''
+
     # download necessary tools
     download_tagger(lib_dir)
     download_parser(lib_dir)
     
     # parse
-#    os.system('CLASSPATH="lib:lib/stanford-parser/stanford-parser.jar:lib/stanford-parser/stanford-parser-3.5.1-models.jar"')
-#    os.system('javac -cp $CLASSPATH lib/*.java')
+    #TODO: sometimes compile failed
+    os.system('CLASSPATH="lib:lib/stanford-parser/stanford-parser.jar:lib/stanford-parser/stanford-parser-3.5.1-models.jar"')
+    os.system('javac -cp $CLASSPATH lib/*.java')
    
     print('=' * 80)
     print('Preprocessing dataset')

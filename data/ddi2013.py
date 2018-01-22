@@ -294,9 +294,20 @@ class DDI2013TreeDataset(Dataset):
     def collate(self, samples):
         """
         merges a list of samples to form a mini-batch
+        Args:
+            samples: list of dict
         """
+        def aggregate(k):
+            return [sample[k] for sample in samples]
         
-        return samples
+        assert len(samples) > 0, 'samples contain no element'
+        
+        keys = samples[0].keys()
+        
+        res = {k:aggregate(k) for k in keys}
+        res['target'] = torch.stack(res['target'], dim=0)
+        return res
+        
     
     def read_sentences(self, filename):
         with open(filename, 'r') as f:
@@ -349,6 +360,6 @@ class DDI2013TreeDataset(Dataset):
         sent_id pair_id e1 e2 ddi type p1 p2
         """
         with open(filename, 'r') as f:
-            labels = list(map(lambda x: target_map[x.split('|')[5]], f.readlines()))
-            labels = torch.Tensor(labels)
+            labels = list(map(lambda x: [target_map[x.split('|')[5]]], f.readlines()))
+            labels = torch.LongTensor(labels)
         return labels

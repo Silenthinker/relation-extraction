@@ -19,7 +19,9 @@ from sklearn.utils import shuffle
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import precision_score, recall_score, f1_score, classification_report
 
-from data.ddi2013 import DDI2013Dataset
+from constants import CONSTANTS
+import data.ddi2013 as ddi2013
+from data.ddi2013 import DDI2013SeqDataset
 from criterion import HingeLoss
 from model.lstm import LSTM
 from model.attention_lstm import InterAttentionLSTM, AttentionPoolingLSTM
@@ -54,11 +56,11 @@ def build_vocab(sents, min_count=5, caseless=True):
     else:
         counter.update(chain.from_iterable(sents))
     str2int = [w for w, c in counter.items() if c >= min_count]
-    str2int = {w:i for i, w in enumerate(str2int, 1)} # start from 1
-    str2int['UNK'] = 0
-    str2int['PAD'] = len(str2int)
+    str2int = {w:i for i, w in enumerate(str2int, len(CONSTANTS))} # start from length of CONSTANTS
+    str2int.update(CONSTANTS)
+    
     return str2int
-
+    
 def build_features(raw_features, mapping, caseless=True):
     """
     Args:
@@ -71,6 +73,7 @@ def build_features(raw_features, mapping, caseless=True):
         if caseless:
             w = w.lower()
         return mapping.get(w, mapping['UNK'])
+    
     return [list(map(lambda w:encode(w, mapping, caseless), sent)) for sent in raw_features]
 
 def map_iterable(iterable, mapping):
@@ -179,7 +182,7 @@ def construct_bucket_dataloader(input_features, input_targets, pad_feature, batc
                pad_position(p2_feature, thresholds[idx], cur_len, position_bound))
         buckets[idx][3].append(i)
         buckets[idx][4].append([1] * cur_len + [0] * (thresholds[idx] - cur_len))
-    bucket_dataset = [DDI2013Dataset(torch.LongTensor(bucket[0]), torch.LongTensor(bucket[1]), torch.LongTensor(bucket[2]), bucket[3], torch.ByteTensor(bucket[4]))
+    bucket_dataset = [DDI2013SeqDataset(torch.LongTensor(bucket[0]), torch.LongTensor(bucket[1]), torch.LongTensor(bucket[2]), bucket[3], torch.ByteTensor(bucket[4]))
                       for bucket in buckets]
     dataset_loader = [torch.utils.data.DataLoader(tup, batch_size, shuffle=is_train, drop_last=False) for tup in bucket_dataset]
     return dataset_loader
@@ -270,9 +273,8 @@ def save_checkpoint(state, track_list, filename):
         json.dump(track_list, f)
     torch.save(state, filename + '.model')
 
-'''
 # possibly deprecated
-def load_corpus(train_path, test_path):
+def load_corpus(corpus_dir):
     """
     load ddi corpus
     """
@@ -284,7 +286,7 @@ def load_corpus(train_path, test_path):
     def load_file(path):
         def parse_line(line):
             line = line.split('|')
-            single_line = SingleLine(*line)
+            single_line = ddi2013.SingleLine(*line)
             single_line = single_line._replace(sent=single_line.sent.split(), p1=decode_int_string(single_line.p1), p2=decode_int_string(single_line.p2))            
             return single_line
 
@@ -295,8 +297,10 @@ def load_corpus(train_path, test_path):
         except Exception as inst:
             print(inst)
         return corpus    
-    return load_file(train_path), load_file(test_path)
-'''
+    train_path = os.path.join(corpus_dir, 'train.ddi')
+    val_path = os.path.join(corpus_dir, 'val.ddi')
+    test_path = os.path.join(corpus_dir, 'test.ddi')
+    return load_file(train_path), load_file(val_path), load_file(test_path)
     
 def evaluate(y_true, y_pred, labels=None, target_names=None):
     """
@@ -339,23 +343,6 @@ def make_variable(tensor, cuda=False, volatile=False, requires_grad=False):
     if cuda:
         tensor = tensor.cuda()
     return torch.autograd.Variable(tensor, volatile=volatile, requires_grad=requires_grad)
-    
-def prepare_sample(sample, volatile=False, cuda=False):
-    
-    """
-    wrap tensors in Variable class
-    Args:
-        sample: dict
-    """
-    
-    return {
-            'index': make_variable(sample['index'], cuda=False, volatile=volatile),
-            'feature': make_variable(sample['feature'], cuda=cuda, volatile=volatile), 
-            'position': make_variable(sample['position'], cuda=cuda, volatile=volatile), 
-            'target': make_variable(sample['target'], cuda=cuda, volatile=volatile).view(-1),
-            'size': len(sample['index']),
-            'mask': make_variable(sample['mask'], cuda=cuda, volatile=volatile),
-            }
 
 def get_class_weights(l):
     """

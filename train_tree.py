@@ -22,9 +22,54 @@ import torch.optim as optim
 
 import utils
 import options
+import meters
 from model.tree_lstm import RelationTreeLSTM
 import data.ddi2013 as ddi2013
 from trainer import TreeTrainer
+
+def train(data_loader, trainer, epoch):
+    tot_length = len(data_loader)
+    loss_meter = meters.AverageMeter()
+    lr = trainer.get_lr()
+    with tqdm(data_loader, total=tot_length, desc=' Epoch {}'.format(epoch)) as pbar:
+        for sample in pbar:
+            loss = trainer.train_step(sample)
+            loss_meter.update(loss)
+            pbar.set_postfix(collections.OrderedDict([
+                    ('loss', '{:.4f} ({:.4f})'.format(loss, loss_meter.avg)),
+                    ('lr', '{:.4f}'.format(lr))
+                    ]))
+    return loss_meter.avg
+
+def evaluate(trainer, data_loader, t_map, cuda=False):
+    y_true = []
+    y_pred = []
+    tot_length = len(data_loader)
+    tot_loss = 0
+    loss_meter = meters.AverageMeter()
+    with tqdm(data_loader, total=tot_length) as pbar:
+        for sample in pbar:
+            target = sample['target']
+            loss = trainer.valid_step(sample)
+            pred = trainer.pred_step(sample)
+            if cuda:
+                pred = pred.cpu() # cast back to cpu
+            tot_loss += loss
+            y_true.append(target.numpy().tolist())
+            y_pred.append(pred.numpy().tolist())
+            loss_meter.update(loss)
+            pbar.set_postfix(collections.OrderedDict([
+                    ('loss', '{:.4f} ({:.4f})'.format(loss, loss_meter.avg))
+                    ]))
+    
+    y_true = list(chain.from_iterable(y_true))
+    y_pred = list(chain.from_iterable(y_pred))
+    ivt_t_map = {v:k for k, v in t_map.items()}
+    labels = [k for k,v in ivt_t_map.items() if v != 'null']
+    t_names = [ivt_t_map[l] for l in labels]
+    prec, rec, f1 = utils.evaluate(y_true, y_pred, labels=labels, target_names=t_names)        
+    avg_loss = tot_loss / tot_length
+    return prec, rec, f1, avg_loss
 
 def main():
     parser = options.get_parser('Trainer')
@@ -122,10 +167,6 @@ def main():
                 model.update_part_embedding(in_doc_word_indices) # update only non-pretrained words
         model.rand_init(init_embedding=args.rand_embedding)
     
-    for i in test_loader:
-        print(i)
-        break
-    '''
     # trainer
     trainer = TreeTrainer(args, model, criterion)
     
@@ -134,7 +175,7 @@ def main():
         test_prec, test_rec, test_f1, _ = evaluate(trainer, test_loader, target_map, cuda=args.cuda)
         print('checkpoint dev_prec: {:.4f}, dev_rec: {:.4f}, dev_f1: {:.4f}, test_prec: {:.4f}, test_rec: {:.4f}, test_f1: {:.4f}'.format(
             dev_prec, dev_rec, dev_f1, test_prec, test_rec, test_f1))
-    
+        
     track_list = []
     best_f1 = float('-inf')
     patience_count = 0
@@ -146,7 +187,7 @@ def main():
     
         # update lr
         trainer.lr_step()
-           
+        
         dev_prec, dev_rec, dev_f1, dev_loss = evaluate(trainer, val_loader, target_map, cuda=args.cuda)
         if dev_f1 >= best_f1:
             patience_count = 0
@@ -180,7 +221,7 @@ def main():
         if patience_count >= args.patience:
             break
     
-    '''
+        
 
 if __name__ == '__main__':
     main()
