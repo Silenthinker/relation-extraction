@@ -50,12 +50,16 @@ class ChildSumTreeLSTM(nn.Module):
 class RelationTreeLSTM(nn.Module):
     def __init__(self, vocab_size, tagset_size, args):
         super().__init__()
+        self.args = args
+        self.dropout_ratio = args.dropout_ratio
         self.embedding_dim = args.embedding_dim
         self.hidden_dim = args.hidden_dim
         self.tagset_size = tagset_size
         self.word_embeds = nn.Embedding(vocab_size, self.embedding_dim)
         self.childsumtreelstm = ChildSumTreeLSTM(self.embedding_dim, self.hidden_dim)
         self.linear = nn.Linear(self.hidden_dim, self.tagset_size)
+        self.dropout1 = nn.Dropout(p=self.dropout_ratio)
+        self.dropout2 = nn.Dropout(p=self.dropout_ratio)
         self.reg_params = []
       
     @property
@@ -98,8 +102,10 @@ class RelationTreeLSTM(nn.Module):
         
     def forward(self, tree, inputs):
         inputs_emb = self.word_embeds(inputs)
-        state, hidden = self.childsumtreelstm(tree, inputs_emb)
-        output = self.linear(state) # output: tagset_size
+        d_inputs_emb = self.dropout1(inputs_emb)
+        state, hidden = self.childsumtreelstm(tree, d_inputs_emb)
+        d_state = self.dropout2(state)
+        output = self.linear(d_state) # output: tagset_size
         return {'output' :output}, hidden
     
     def predict(self, tree, inputs):

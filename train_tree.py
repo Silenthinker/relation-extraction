@@ -20,6 +20,7 @@ import torch.autograd as autograd
 import torch.nn as nn
 import torch.optim as optim
 
+
 import utils
 import options
 import meters
@@ -27,7 +28,7 @@ from model.tree_lstm import RelationTreeLSTM
 import data.ddi2013 as ddi2013
 from trainer import TreeTrainer
 
-def train(data_loader, trainer, epoch):
+def train(data_loader, trainer, epoch, q=None):
     tot_length = len(data_loader)
     loss_meter = meters.AverageMeter()
     lr = trainer.get_lr()
@@ -39,7 +40,11 @@ def train(data_loader, trainer, epoch):
                     ('loss', '{:.4f} ({:.4f})'.format(loss, loss_meter.avg)),
                     ('lr', '{:.4f}'.format(lr))
                     ]))
-    return loss_meter.avg
+    epoch_loss = loss_meter.avg
+    if q is None:
+        return epoch_loss
+    else:
+        q.put(epoch_loss)
 
 def evaluate(trainer, data_loader, t_map, cuda=False):
     y_true = []
@@ -169,7 +174,7 @@ def main():
     
     # trainer
     trainer = TreeTrainer(args, model, criterion)
-    
+        
     if os.path.isfile(args.load_checkpoint):
         dev_prec, dev_rec, dev_f1, _ = evaluate(trainer, val_loader, target_map, cuda=args.cuda)
         test_prec, test_rec, test_f1, _ = evaluate(trainer, test_loader, target_map, cuda=args.cuda)
@@ -183,6 +188,7 @@ def main():
     
     
     for epoch in range(start_epoch, num_epoch):
+        
         epoch_loss = train(train_loader, trainer, epoch)
     
         # update lr
@@ -209,7 +215,7 @@ def main():
                             't_map': target_map,
                         }, {'track_list': track_list,
                             'args': vars(args)
-                            }, args.checkpoint + '_lstm')
+                            }, args.checkpoint)
             except Exception as inst:
                 print(inst)
         else:

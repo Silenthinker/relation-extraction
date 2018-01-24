@@ -36,6 +36,8 @@ class BasicTrainer:
         # regularizer
         self.regularizer = self.__build_regularizer(self.model.reg_params)
         
+        model.share_memory()
+        
     
     def _build_optimizer(self):
         if self.args.optimizer == 'sgd':

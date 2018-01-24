@@ -13,6 +13,8 @@ def get_parser(desc):
     parser = argparse.ArgumentParser(description='Relation Extraction Toolkit -- ' + desc)
     parser.add_argument('--disable-cuda', action='store_true', 
                         help='Do not use gpu resources')
+    parser.add_argument('--num-processes', type=int, default=2, metavar='N',
+                        help='how many training processes to use (default: 2)')
     
     return parser
 
