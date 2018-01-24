@@ -19,7 +19,7 @@ import torch
 import torch.autograd as autograd
 import torch.nn as nn
 import torch.optim as optim
-
+from torch import multiprocessing as mp
 
 import utils
 import options
@@ -28,7 +28,7 @@ from model.tree_lstm import RelationTreeLSTM
 import data.ddi2013 as ddi2013
 from trainer import TreeTrainer
 
-def train(data_loader, trainer, epoch, q=None):
+def train(data_loader, trainer, epoch):
     tot_length = len(data_loader)
     loss_meter = meters.AverageMeter()
     lr = trainer.get_lr()
@@ -38,13 +38,10 @@ def train(data_loader, trainer, epoch, q=None):
             loss_meter.update(loss)
             pbar.set_postfix(collections.OrderedDict([
                     ('loss', '{:.4f} ({:.4f})'.format(loss, loss_meter.avg)),
-                    ('lr', '{:.4f}'.format(lr))
+                    ('lr', '{:.4f}'.format(lr)),
+                    ('pid', '{:d}'.format(os.getpid()))
                     ]))
-    epoch_loss = loss_meter.avg
-    if q is None:
-        return epoch_loss
-    else:
-        q.put(epoch_loss)
+    return loss_meter.avg
 
 def evaluate(trainer, data_loader, t_map, cuda=False):
     y_true = []
@@ -185,12 +182,17 @@ def main():
     best_f1 = float('-inf')
     patience_count = 0
     start_time = time.time()
-    
+    processes = []
     
     for epoch in range(start_epoch, num_epoch):
-        
-        epoch_loss = train(train_loader, trainer, epoch)
-    
+        for rank in range(args.num_processes):
+            p = mp.Process(target=train, args=(train_loader, trainer, epoch))
+            p.start()
+            processes.append(p)        
+            epoch_loss = train(train_loader, trainer, epoch)
+        for p in processes:
+            p.join()
+            
         # update lr
         trainer.lr_step()
         
