@@ -97,9 +97,9 @@ def dependency_parse(filepath, cp='', tokenize=True):
     print('\nDependency parsing ' + filepath)
     dirpath = os.path.dirname(filepath)
     filepre = os.path.splitext(os.path.basename(filepath))[0]
-    tokpath = os.path.join(dirpath, filepre + '.toks')
-    parentpath = os.path.join(dirpath, filepre + '.parents')
-    relpath =  os.path.join(dirpath, filepre + '.rels')
+    tokpath = os.path.join(dirpath, filepre + '.dtoks')
+    parentpath = os.path.join(dirpath, filepre + '.dparents')
+    relpath =  os.path.join(dirpath, filepre + '.drels')
     tokenize_flag = '-tokenize - ' if tokenize else ''
     cmd = ('java -cp %s DependencyParse -tokpath %s -parentpath %s -relpath %s %s < %s'
         % (cp, tokpath, parentpath, relpath, tokenize_flag, filepath))
@@ -108,7 +108,7 @@ def dependency_parse(filepath, cp='', tokenize=True):
 def constituency_parse(filepath, cp='', tokenize=True):
     dirpath = os.path.dirname(filepath)
     filepre = os.path.splitext(os.path.basename(filepath))[0]
-    tokpath = os.path.join(dirpath, filepre + '.toks')
+    tokpath = os.path.join(dirpath, filepre + '.ctoks')
     parentpath = os.path.join(dirpath, filepre + '.cparents')
     tokenize_flag = '-tokenize - ' if tokenize else ''
     cmd = ('java -cp %s ConstituencyParse -tokpath %s -parentpath %s %s < %s'

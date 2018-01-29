@@ -104,7 +104,7 @@ class LSTM(nn.Module):
         w_embeds = self.word_embeds(sentence) # batch_size, seq_len, embedding_dim
         if self.position:
             p_embeds = self.position_embeds(position + self.position_bound) # batch_size, 2*seq_len, p_embed_dim
-            p_embeds = p_embeds.view(p_embeds.size(0), p_embeds.size(1) // 2, -1)
+            p_embeds = None # TODO: problematic! p_embeds.view(p_embeds.size(0), p_embeds.size(1) // 2, -1)
             embeds = torch.cat([w_embeds, p_embeds], dim=2)
         else:
             embeds = w_embeds

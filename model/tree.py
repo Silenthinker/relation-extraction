@@ -36,3 +36,30 @@ class Tree(object):
             count += 1
         self._depth = count
         return self._depth
+
+'''
+class BinaryTree:
+    def __init__(self):
+        self.parent = None
+        self.left = None
+        self.right = None
+    
+    def size(self):
+        if getattr(self, '_size'):
+            return self._size
+        count = 1 + self.left.size() + self.right.size()
+        self._size = count
+        return self._size
+    
+    def depth(self):
+        if getattr(self, '_depth'):
+            return self._depth
+        count = 0
+        if self.left is not None or self.right is not None:
+            child_depth = max(self.left.depth() + self.right.depth())
+            if child_depth > count:
+                count = child_depth
+            count += 1
+        self._depth = count
+        return self._depth
+'''

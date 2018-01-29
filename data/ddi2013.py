@@ -270,24 +270,34 @@ class DDI2013SeqDataset(Dataset):
         return res
 
 class DDI2013TreeDataset(Dataset):
-    def __init__(self, path, mapping, caseless):
+    def __init__(self, path, mapping, caseless, dep=True):
         super().__init__()
         
         self.mapping = mapping
         self.caseless = caseless
-        self.sentences = self.read_sentences(os.path.join(path, 'sent.toks'))
-        self.trees = self.read_trees(os.path.join(path, 'sent.parents'))
+        self.dep = dep
+        _const = '' if dep else 'c'
+        sentences = self.read_sentences(os.path.join(path, 'sent.' + _const + 'toks'))
+        self.sentences = self.build_features(sentences)
+        self.trees = self.read_trees(os.path.join(path, 'sent.' + _const + 'parents'))
         self.labels = self.read_labels(os.path.join(path, 'other.txt'))
+        positions = self.build_positions(sentences)
+        self.positions = self.build_features(positions)
         self.size = self.labels.size(0)
+        
+        # sanity check
+        self._sanity_check(os.path.join(path, 'sent.' + _const + 'toks'))
 
     def __len__(self):
         return self.size
 
     def __getitem__(self, index):
         tree = deepcopy(self.trees[index])
-        sent = deepcopy(self.sentences[index])
+        sentences = deepcopy(self.sentences[index])
+        position = deepcopy(self.positions[index])
         label = deepcopy(self.labels[index])
-        return {'feature': sent, 
+        return {'feature': sentences, 
+                'position': position,
                 'tree': tree,
                 'target': label}
     
@@ -307,9 +317,15 @@ class DDI2013TreeDataset(Dataset):
         res = {k:aggregate(k) for k in keys}
         res['target'] = torch.stack(res['target'], dim=0)
         return res
-        
+    
+    def build_features(self, inputs):
+        return [torch.LongTensor(item) for item in inputs]
     
     def read_sentences(self, filename):
+        """
+        Args:
+            sentences: [[int]]
+        """
         with open(filename, 'r') as f:
             sentences = [self.read_sentence(line) for line in tqdm(f.readlines())]
         return sentences
@@ -320,8 +336,42 @@ class DDI2013TreeDataset(Dataset):
                 w = w.lower()
             return mapping.get(w, mapping['UNK'])
         indices = [encode(w, self.mapping, self.caseless) for w in line.strip().split()]
-        return torch.LongTensor(indices)
+        return indices
 
+    def build_positions(self, sentences):
+        """
+        Return:
+            [[int]], concatenated position indices
+        """
+        d1, d2 = self.mapping['drug1'], self.mapping['drug2']
+        positions = []
+        # ensure there is a pair of mentions
+        for sent in sentences:
+            p1 = None
+            p2 = None
+            try:
+                _p1 = sent.index(d1)
+                _p2 = sent.index(d2)
+            except:
+                print(sent)
+                raise ValueError
+            len_sent = len(sent)
+            p1 = [i - _p1 for i in range(0, len_sent)]
+            p2 = [i - _p2 for i in range(0, len_sent)]
+            positions.append(p1 + p2)
+        return positions
+    
+    def _sanity_check(self, filename):
+        """
+        Check if length is consistent for one sentence and corresponding position
+        """
+        with open(filename, 'r') as f:
+            for line, pos in zip(f.readlines(), self.positions):
+                sent = list(map(lambda x: str(x), line.split()))
+                pos = list(map(lambda x: str(x), pos))
+                if len(sent) != len(pos) // 2:
+                    print('Inconsistent length {} vs {}! sent: {}\npos: {}'.format(len(sent), len(pos) // 2, ' '.join(sent), ' '.join(pos)))
+        
     def read_trees(self, filename):
         with open(filename, 'r') as f:
             trees = [self.read_tree(line) for line in tqdm(f.readlines())]
@@ -329,6 +379,8 @@ class DDI2013TreeDataset(Dataset):
 
     def read_tree(self, line):
         parents = list(map(int, line.split()))
+        # sanity check
+        assert max(parents) <= len(parents), 'Index should be smaller than length! {}'.format(' '.join(parents))
         trees = dict()
         root = None
         for i in range(1, len(parents) + 1):

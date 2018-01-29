@@ -28,7 +28,7 @@ from model.tree_lstm import RelationTreeLSTM
 import data.ddi2013 as ddi2013
 from trainer import TreeTrainer
 
-def train(data_loader, trainer, epoch):
+def train(data_loader, trainer, epoch, q=None):
     tot_length = len(data_loader)
     loss_meter = meters.AverageMeter()
     lr = trainer.get_lr()
@@ -41,7 +41,11 @@ def train(data_loader, trainer, epoch):
                     ('lr', '{:.4f}'.format(lr)),
                     ('pid', '{:d}'.format(os.getpid()))
                     ]))
-    return loss_meter.avg
+    epoch_loss = loss_meter.avg
+    if q is None:
+        return epoch_loss
+    else:
+        q.put(epoch_loss)
 
 def evaluate(trainer, data_loader, t_map, cuda=False):
     y_true = []
@@ -131,7 +135,7 @@ def main():
                 dataset = torch.load(split_path)
             else:
                 print('Building dataset from scratch...')
-                dataset = ddi2013.DDI2013TreeDataset(split_dir, feature_map, args.caseless)
+                dataset = ddi2013.DDI2013TreeDataset(split_dir, feature_map, args.caseless, dep=args.childsum_tree)
                 print('Save dataset to {}'.format(split_path))
                 torch.save(dataset, split_path)
             if dataloader:
@@ -183,15 +187,24 @@ def main():
     patience_count = 0
     start_time = time.time()
     processes = []
+    q = mp.Queue()
+    
+    # set start methods
+    try:
+        mp.set_start_method('spawn')
+    except RuntimeError:
+        pass
     
     for epoch in range(start_epoch, num_epoch):
         for rank in range(args.num_processes):
-            p = mp.Process(target=train, args=(train_loader, trainer, epoch))
+            p = mp.Process(target=train, args=(train_loader, trainer, epoch, q))
             p.start()
             processes.append(p)        
-            epoch_loss = train(train_loader, trainer, epoch)
+#            epoch_loss = train(train_loader, trainer, epoch)
         for p in processes:
             p.join()
+        
+        epoch_loss = q.get()
             
         # update lr
         trainer.lr_step()

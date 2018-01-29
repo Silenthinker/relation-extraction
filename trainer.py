@@ -176,9 +176,11 @@ class TreeTrainer(BasicTrainer):
         self.loss = 0
         
         res = {}
-        for feature, tree, target in zip(self._sample['feature'], self._sample['tree'], self._sample['target']):
+        for feature, position, tree, target in zip(self._sample['feature'], self._sample['position'], self._sample['tree'], self._sample['target']):
             # item is dict
-            output_dict, _ = self.model(tree, feature)
+            if not self.args.position:
+                position = None
+            output_dict, _ = self.model(tree, feature, position)
             self.loss += self.criterion(output_dict['output'], target)
             # [dict] to dict[list]
             if not res:
@@ -211,8 +213,8 @@ class TreeTrainer(BasicTrainer):
         self.model.eval()
         
         res = []
-        for feature, tree in zip(self._sample['feature'], self._sample['tree']):
-            _, pred = self.model.predict(tree, feature)
+        for feature, position, tree in zip(self._sample['feature'], self._sample['position'], self._sample['tree']):
+            _, pred = self.model.predict(tree, feature, position)
             res.append(pred)
 #        print(sample['target'], pred)
         return torch.stack(res, dim=0)
@@ -225,6 +227,7 @@ class TreeTrainer(BasicTrainer):
         self._sample:
             dict:
                 feature: [Var(LongTensor)]
+                position: [Var(LongTensor)]
                 target: Var(LongTensor)
                 tree: [Tree]
         """
@@ -232,5 +235,6 @@ class TreeTrainer(BasicTrainer):
            sample[k] = [make_variable(item, cuda=cuda, volatile=volatile) for item in sample[k]]
         self._sample = {}
         self._sample['feature'] = [make_variable(item, cuda=cuda, volatile=volatile) for item in sample['feature']]
+        self._sample['position'] = [make_variable(item, cuda=cuda, volatile=volatile) for item in sample['position']]
         self._sample['target'] = make_variable(sample['target'], cuda=cuda, volatile=volatile).view(-1)
         self._sample['tree'] = sample['tree']

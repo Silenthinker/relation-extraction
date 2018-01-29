@@ -86,8 +86,6 @@ def add_model_args(parser):
                        help='specify model')
     group.add_argument('--embedding_dim', type=int, default=100, 
                        help='embedding dimension')
-    group.add_argument('--relation_dim', type=int, default=100,
-                       help='relation embedding dimension')
     group.add_argument('--position_dim', type=int, default=20, 
                        help='position embedding dimension')
     group.add_argument('--position_bound', type=int, default=200, 
@@ -108,6 +106,8 @@ def add_model_args(parser):
                        help='use diagonal bilinear for inter attention')
     group.add_argument('--sent_repr', type=str, default='max', choices=['max', 'concat'],
                        help='specify way to represent sentence')
+    group.add_argument('--childsum_tree', action='store_true',
+                       help='use dependency tree; otherwise use constituency tree')
     
     return group
 
