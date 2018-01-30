@@ -34,12 +34,14 @@ def train(data_loader, trainer, epoch, q=None):
     lr = trainer.get_lr()
     with tqdm(data_loader, total=tot_length, desc=' Epoch {}'.format(epoch)) as pbar:
         for sample in pbar:
-            loss = trainer.train_step(sample)
+            loss, t = trainer.train_step(sample)
             loss_meter.update(loss)
             pbar.set_postfix(collections.OrderedDict([
                     ('loss', '{:.4f} ({:.4f})'.format(loss, loss_meter.avg)),
                     ('lr', '{:.4f}'.format(lr)),
-                    ('pid', '{:d}'.format(os.getpid()))
+                    ('t0', t['prepare']),
+                    ('t1', t['forward']),
+                    ('t2', t['backward']),
                     ]))
     epoch_loss = loss_meter.avg
     if q is None:
