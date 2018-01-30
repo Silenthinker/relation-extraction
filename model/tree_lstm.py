@@ -195,7 +195,8 @@ class RelationTreeLSTM(nn.Module):
         if self.position:
             assert pos is not None
             position_emb = self.position_embeds(pos + self.position_bound) # 2*seq_len, p_embed_dim
-            position_emb = torch.cat([position_emb[0:position_emb.size(0)//2], position_emb[position_emb.size(0)//2:]], dim=1)
+            position_emb = torch.cat(torch.split(position_emb, position_emb.size(0) // 2, dim=0), dim=1)
+#            position_emb = torch.cat([position_emb[0:position_emb.size(0)//2], position_emb[position_emb.size(0)//2:]], dim=1)
             inputs_emb = torch.cat([inputs_emb, position_emb], dim=1)
             
         d_inputs_emb = self.dropout1(inputs_emb)
