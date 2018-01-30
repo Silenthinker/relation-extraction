@@ -19,7 +19,6 @@ import torch
 import torch.autograd as autograd
 import torch.nn as nn
 import torch.optim as optim
-from torch import multiprocessing as mp
 
 import utils
 import options
@@ -188,26 +187,10 @@ def main():
     best_f1 = float('-inf')
     patience_count = 0
     start_time = time.time()
-    processes = []
-    q = mp.Queue()
-    
-    # set start methods
-    try:
-        mp.set_start_method('spawn')
-    except RuntimeError:
-        pass
     
     for epoch in range(start_epoch, num_epoch):
-        for rank in range(args.num_processes):
-            p = mp.Process(target=train, args=(train_loader, trainer, epoch, q))
-            p.start()
-            processes.append(p)        
-#            epoch_loss = train(train_loader, trainer, epoch)
-        for p in processes:
-            p.join()
-        
-        epoch_loss = q.get()
-            
+#        epoch_loss = train(train_loader, trainer, epoch)
+                
         # update lr
         trainer.lr_step()
         
