@@ -60,11 +60,9 @@ class BinaryTreeLSTM(nn.Module):
         self.bf = 2
         
         self.fioux = nn.Linear(self.in_dim, 4 * self.mem_dim, bias=True) # responsible for bias
-        self.ih = nn.Linear(self.bf * self.mem_dim, self.mem_dim, bias=False)
-        self.oh = nn.Linear(self.bf * self.mem_dim, self.mem_dim, bias=False)
-        self.uh = nn.Linear(self.bf * self.mem_dim, self.mem_dim, bias=False)
+        self.iouh = nn.Linear(self.bf * self.mem_dim, self.mem_dim * 3, bias=False)
         self.fh = nn.Linear(self.bf * self.mem_dim, self.bf * self.mem_dim, bias=False)
-        self.reg_params = [self.fioux, self.ih, self.oh, self.uh, self.fh]
+        self.reg_params = [self.fioux, self.iouh, self.fh]
         
     def node_forward(self, inputs, child_c, child_h):
         """
@@ -77,7 +75,8 @@ class BinaryTreeLSTM(nn.Module):
         inputs = inputs.view(1, -1)
         fioux = self.fioux(inputs) # [1, 4*mem_dim]
         fx, ix, ox, ux = torch.split(fioux, fioux.size(1) // 4, dim=1) # [1, mem_dim]
-        ih, oh, uh = self.ih(child_h), self.oh(child_h), self.uh(child_h) # [1, mem_dim]
+        iouh = self.iouh(child_h)
+        ih, oh, uh = torch.split(iouh, iouh.size(1) // 3, dim=1) # [1, mem_dim]
         i, o, u = F.sigmoid(ix + ih), F.sigmoid(ox + oh), F.tanh(ux + uh)
         
         fh = self.fh(child_h) # [1, bf*mem_dim]
@@ -196,7 +195,8 @@ class RelationTreeLSTM(nn.Module):
         if self.position:
             assert pos is not None
             position_emb = self.position_embeds(pos + self.position_bound) # 2*seq_len, p_embed_dim
-            position_emb = torch.cat([position_emb[0:position_emb.size(0)//2], position_emb[position_emb.size(0)//2:]], dim=1)
+            position_emb = torch.cat(torch.split(position_emb, position_emb.size(0) // 2, dim=0), dim=1)
+#            position_emb = torch.cat([position_emb[0:position_emb.size(0)//2], position_emb[position_emb.size(0)//2:]], dim=1)
             inputs_emb = torch.cat([inputs_emb, position_emb], dim=1)
             
         d_inputs_emb = self.dropout1(inputs_emb)

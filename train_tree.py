@@ -197,8 +197,9 @@ def main():
         mp.set_start_method('spawn')
     except RuntimeError:
         pass
-    
+
     for epoch in range(start_epoch, num_epoch):
+#        epoch_loss = train(train_loader, trainer, epoch)
         for rank in range(args.num_processes):
             p = mp.Process(target=train, args=(train_loader, trainer, epoch, q))
             p.start()
@@ -208,7 +209,8 @@ def main():
             p.join()
         
         epoch_loss = q.get()
-            
+
+                
         # update lr
         trainer.lr_step()
         
