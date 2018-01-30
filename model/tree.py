@@ -10,8 +10,8 @@ class Tree(object):
         self.parent = None
         self.children = []
         self.state = None
-        self.size = None
-        self.depth = None
+        self.size = 1
+        self.depth = 0
         self.idx = None
 
     def add_child(self, child):
@@ -20,11 +20,10 @@ class Tree(object):
 
     @property
     def size(self):
-        if self._size is None:
-            count = 1
-            for c in self.children:
-                count += c.size
-            self._size = count
+        count = 1
+        for c in self.children:
+            count += c.size
+        self._size = count
         return self._size
     
     @size.setter
@@ -33,15 +32,14 @@ class Tree(object):
 
     @property
     def depth(self):
-        if self._depth is None:
-            count = 0
-            if self.num_children > 0:
-                for c in self.children:
-                    child_depth = c.depth
-                    if child_depth > count:
-                        count = child_depth
-                count += 1
-            self._depth = count
+        count = 0
+        if self.num_children > 0:
+            for c in self.children:
+                child_depth = c.depth
+                if child_depth > count:
+                    count = child_depth
+            count += 1
+        self._depth = count
         return self._depth
     
     @depth.setter

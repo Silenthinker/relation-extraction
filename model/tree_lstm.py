@@ -36,17 +36,16 @@ class ChildSumTreeLSTM(nn.Module):
         return c, h
 
     def forward(self, tree, inputs):
-        [self.forward(tree.children[idx], inputs) for idx in range(tree.num_children)]
-
-        if tree.num_children == 0:
-            child_c = Var(inputs[0].data.new(1, self.mem_dim).fill_(0.))
-            child_h = Var(inputs[0].data.new(1, self.mem_dim).fill_(0.))
-        else:
-            child_c, child_h = zip(* map(lambda x: x.state, tree.children))
-            child_c, child_h = torch.cat(child_c, dim=0), torch.cat(child_h, dim=0) # child_c, child_h: [num_children, mem_dim]
-
-        tree.state = self.node_forward(inputs[tree.idx], child_c, child_h)
-        return tree.state
+        for node in tree:
+            if node.num_children == 0:
+                child_c = Var(inputs[0].data.new(1, self.mem_dim).fill_(0.))
+                child_h = Var(inputs[0].data.new(1, self.mem_dim).fill_(0.))
+            else:
+                child_c, child_h = zip(* map(lambda x: x.state, node.children))
+                child_c, child_h = torch.cat(child_c, dim=0), torch.cat(child_h, dim=0) # child_c, child_h: [num_children, mem_dim]
+    
+            node.state = self.node_forward(inputs[node.idx], child_c, child_h)
+        return tree[-1].state
 
 # Module for binary tree lstm 
 class BinaryTreeLSTM(nn.Module):
@@ -91,6 +90,10 @@ class BinaryTreeLSTM(nn.Module):
         return c, h        
         
     def forward(self, tree, inputs):
+        """
+        Args:
+            tree: level order traversal
+        """
         def _zeros(dim):
             return Var(inputs[0].data.new(1, dim).fill_(0.))
         
@@ -104,27 +107,24 @@ class BinaryTreeLSTM(nn.Module):
                 right = _zeros(self.mem_dim)
                 
             return torch.cat([left, right], dim=1)
-        
-        assert tree.num_children <= 2, 'Only accept binary tree!'
-        
-        left_c, left_h = None, None
-        right_c, right_h = None, None
-        
-        [self.forward(tree.children[idx], inputs) for idx in range(tree.num_children)]
-        
-        x = _zeros(self.in_dim) if tree.num_children > 0 else inputs[tree.idx] # input is zero only if node is internal
-        
-        if tree.num_children >= 1:
-            left_c, left_h = tree.children[0].state
-        if tree.num_children == 2:
-            right_c, right_h = tree.children[1].state
+
+        for node in tree:
+            left_c, left_h = None, None
+            right_c, right_h = None, None
             
-        child_c = _initialize_child_tensor(left_c, right_c)
-        child_h = _initialize_child_tensor(left_h, right_h)
+            x = _zeros(self.in_dim) if node.num_children > 0 else inputs[node.idx] # input is zero only if node is internal
+            
+            if node.num_children >= 1:
+                left_c, left_h = node.children[0].state
+            if node.num_children == 2:
+                right_c, right_h = node.children[1].state            
+            
+            child_c = _initialize_child_tensor(left_c, right_c)
+            child_h = _initialize_child_tensor(left_h, right_h)
+    
+            node.state = self.node_forward(x, child_c, child_h)
         
-        tree.state = self.node_forward(x, child_c, child_h)
-        
-        return tree.state
+        return tree[-1].state
     
 class RelationTreeLSTM(nn.Module):
     def __init__(self, vocab_size, tagset_size, args):

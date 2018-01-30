@@ -8,6 +8,7 @@ import os
 import glob
 import xml.etree.ElementTree as ET
 from tqdm import tqdm
+from queue import Queue
 from copy import deepcopy
 from collections import namedtuple
 
@@ -229,6 +230,35 @@ def preprocess_ddi(data_path='../../data/re/drugddi2013/raw/train', position=Fal
     print('Done')
     return res
 
+def levelOrder(root):
+    """
+    Binary tree level order traversal
+    Args:
+        root: Tree
+    Return:
+        [Tree]
+    """
+    if root is None:
+        return []
+    
+    q = Queue()
+    q.put(root)
+    ret = []
+    n = 1
+    
+    while not q.empty():
+        count = 0
+        for _ in range(n):
+            node = q.get()
+            ret.append(node)
+            for c in node.children:
+                if c is not None:
+                    q.put(c)
+                    count += 1
+        n = count
+    
+    ret.reverse()
+    return ret
 
 class DDI2013SeqDataset(Dataset):
     """
@@ -378,6 +408,11 @@ class DDI2013TreeDataset(Dataset):
         return trees
 
     def read_tree(self, line):
+        """
+        Parse tree and return level order traversal of tree
+        Return:
+            [Tree]
+        """
         parents = list(map(int, line.split()))
         # sanity check
         assert max(parents) <= len(parents), 'Index should be smaller than length! {}'.format(' '.join(parents))
@@ -405,8 +440,10 @@ class DDI2013TreeDataset(Dataset):
                     else:
                         prev = tree
                         idx = parent
-        return root
 
+        levelTraversal = levelOrder(root)
+        return levelTraversal
+    
     def read_labels(self, filename):
         """
         sent_id pair_id e1 e2 ddi type p1 p2
