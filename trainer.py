@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 """
+from time import time
 
 import torch
 from torch.autograd import Variable
@@ -85,13 +86,18 @@ class BasicTrainer:
         """
         prepare sample, forward, and backward
         """
+        t = {}
+        t0 = time()
         self._prepare_sample(sample, volatile=False, cuda=self.args.cuda)
-        
+        t1 = time()
         self._forward()
-        
+        t2 = time()
         self._backward_and_opt()
-        
-        return self.loss.data[0]
+        t3 = time()
+        t['prepare'] = t1 - t0
+        t['forward'] = t2 - t1
+        t['backward'] = t3 - t2
+        return self.loss.data[0], t
         
     
     def valid_step(self, sample):
