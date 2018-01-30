@@ -42,6 +42,7 @@ def train(data_loader, trainer, epoch, q=None):
                     ('t0', t['prepare']),
                     ('t1', t['forward']),
                     ('t2', t['backward']),
+                    ('pid', '{:d}'.format(os.getpid()))
                     ]))
     epoch_loss = loss_meter.avg
     if q is None:
