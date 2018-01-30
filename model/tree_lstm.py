@@ -91,10 +91,6 @@ class BinaryTreeLSTM(nn.Module):
         return c, h        
         
     def forward(self, tree, inputs):
-        assert tree.num_children <= 2, 'Only accept binary tree!'
-        
-        [self.forward(tree.children[idx], inputs) for idx in range(tree.num_children)]
-        
         def _zeros(dim):
             return Var(inputs[0].data.new(1, dim).fill_(0.))
         
@@ -109,8 +105,13 @@ class BinaryTreeLSTM(nn.Module):
                 
             return torch.cat([left, right], dim=1)
         
+        assert tree.num_children <= 2, 'Only accept binary tree!'
+        
         left_c, left_h = None, None
         right_c, right_h = None, None
+        
+        [self.forward(tree.children[idx], inputs) for idx in range(tree.num_children)]
+        
         x = _zeros(self.in_dim) if tree.num_children > 0 else inputs[tree.idx] # input is zero only if node is internal
         
         if tree.num_children >= 1:
@@ -122,6 +123,7 @@ class BinaryTreeLSTM(nn.Module):
         child_h = _initialize_child_tensor(left_h, right_h)
         
         tree.state = self.node_forward(x, child_c, child_h)
+        
         return tree.state
     
 class RelationTreeLSTM(nn.Module):

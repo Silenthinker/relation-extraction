@@ -292,10 +292,10 @@ class DDI2013TreeDataset(Dataset):
         return self.size
 
     def __getitem__(self, index):
-        tree = deepcopy(self.trees[index])
-        sentences = deepcopy(self.sentences[index])
-        position = deepcopy(self.positions[index])
-        label = deepcopy(self.labels[index])
+        tree = self.trees[index]
+        sentences = self.sentences[index]
+        position = self.positions[index]
+        label = self.labels[index]
         return {'feature': sentences, 
                 'position': position,
                 'tree': tree,

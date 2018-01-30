@@ -5,37 +5,52 @@ Tree object
 Note: is not designed for dynamic construction of tree
 """
 class Tree(object):
+    __slots__ = ['parent', 'children', 'state', '_size', '_depth', 'idx']
     def __init__(self):
         self.parent = None
-        self.num_children = 0
-        self.children = list()
+        self.children = []
+        self.state = None
+        self.size = None
+        self.depth = None
+        self.idx = None
 
     def add_child(self, child):
         child.parent = self
-        self.num_children += 1
         self.children.append(child)
 
+    @property
     def size(self):
-        if getattr(self, '_size'):
-            return self._size
-        count = 1
-        for i in range(self.num_children):
-            count += self.children[i].size()
-        self._size = count
+        if self._size is None:
+            count = 1
+            for c in self.children:
+                count += c.size
+            self._size = count
         return self._size
+    
+    @size.setter
+    def size(self, n):
+        self._size = n
 
+    @property
     def depth(self):
-        if getattr(self, '_depth'):
-            return self._depth
-        count = 0
-        if self.num_children > 0:
-            for i in range(self.num_children):
-                child_depth = self.children[i].depth()
-                if child_depth > count:
-                    count = child_depth
-            count += 1
-        self._depth = count
+        if self._depth is None:
+            count = 0
+            if self.num_children > 0:
+                for c in self.children:
+                    child_depth = c.depth
+                    if child_depth > count:
+                        count = child_depth
+                count += 1
+            self._depth = count
         return self._depth
+    
+    @depth.setter
+    def depth(self, n):
+        self._depth = n
+    
+    @property
+    def num_children(self):
+        return len(self.children)
 
 '''
 class BinaryTree:
