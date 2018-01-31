@@ -189,7 +189,6 @@ def main():
     best_f1 = float('-inf')
     patience_count = 0
     start_time = time.time()
-    processes = []
     q = mp.Queue()
     
     # set start methods
@@ -199,16 +198,17 @@ def main():
         pass
 
     for epoch in range(start_epoch, num_epoch):
-#        epoch_loss = train(train_loader, trainer, epoch)
-        for rank in range(args.num_processes):
-            p = mp.Process(target=train, args=(train_loader, trainer, epoch, q))
-            p.start()
-            processes.append(p)        
+        epoch_loss = train(train_loader, trainer, epoch)
+        processes = []
+#        for rank in range(args.num_processes):
+#            p = mp.Process(target=train, args=(train_loader, trainer, epoch, q))
+#            p.start()
+#            processes.append(p)        
 #            epoch_loss = train(train_loader, trainer, epoch)
-        for p in processes:
-            p.join()
-        
-        epoch_loss = q.get()
+#        for p in processes:
+#            p.join()
+#        
+#        epoch_loss = q.get()
 
                 
         # update lr

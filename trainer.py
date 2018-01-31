@@ -190,9 +190,9 @@ class TreeTrainer(BasicTrainer):
             self.loss += self.criterion(output_dict['output'], target)
             # [dict] to dict[list]
             if not res:
-                res = {k:[v] for k, v in output_dict.items()}
+                res = {k:[v.data] for k, v in output_dict.items()}
             else:
-                [res[k].append(v) for k, v in output_dict.items()]
+                [res[k].append(v.data) for k, v in output_dict.items()]
                 
         self.loss /= self.batch_size
         
@@ -208,7 +208,7 @@ class TreeTrainer(BasicTrainer):
         
         # forward
         output_dict = self._forward(eval=True)
-        self.loss = self.criterion(output_dict['output'], self._sample['target'])
+        self.loss = self.criterion(make_variable(output_dict['output'], cuda=self.args.cuda, volatile=True), self._sample['target'])
         
         return self.loss.data[0]
     
