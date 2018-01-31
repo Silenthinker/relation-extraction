@@ -7,6 +7,7 @@
 from __future__ import print_function
 
 import os
+import sys
 import time
 from tqdm import tqdm
 import collections
@@ -95,7 +96,9 @@ def main():
     
     if args.cuda:
         torch.backends.cudnn.benchmark = True
-        
+    
+    # increase recursion depth
+    sys.setrecursionlimit(10000)
     # checkpoint
     checkpoint_dir = os.path.dirname(args.checkpoint)
     if not os.path.isdir(checkpoint_dir):
@@ -131,7 +134,8 @@ def main():
         # splits = ['train', 'val', 'test']
         
         def load_dataset(split):
-            split_path = os.path.join(data_dir, split + '.pth')
+            _const = 'c' if not args.childsum_tree else ''
+            split_path = os.path.join(data_dir, split + '.' + _const + 'pth')
             split_dir = os.path.join(data_dir, split)
             if os.path.isfile(split_path):
                 print('Found saved dataset, loading from {}'.format(split_path))

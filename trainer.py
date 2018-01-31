@@ -202,6 +202,14 @@ class TreeTrainer(BasicTrainer):
         res['output'] = torch.cat(res['output'], dim=0)
         return res
     
+    def _backward_and_opt(self):
+        super()._backward_and_opt()
+        
+        # remove state of tree
+        for tree in self._sample['tree']:
+            for node in tree:
+                node.state = None
+        
     def valid_step(self, sample):
         # prepare sample
         self._prepare_sample(sample, volatile=True, cuda=self.args.cuda)
