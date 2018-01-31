@@ -5,46 +5,34 @@ Tree object
 Note: is not designed for dynamic construction of tree
 """
 class Tree(object):
-    __slots__ = ['parent', 'children', 'state', '_size', '_depth', 'idx']
+    __slots__ = ['parent', 'children', 'state', 'idx']
     def __init__(self):
         self.parent = None
         self.children = []
         self.state = None
-        self.size = 1
-        self.depth = 0
         self.idx = None
 
     def add_child(self, child):
         child.parent = self
         self.children.append(child)
 
-    @property
     def size(self):
         count = 1
         for c in self.children:
-            count += c.size
-        self._size = count
-        return self._size
+            count += c.size()
+        
+        return count
     
-    @size.setter
-    def size(self, n):
-        self._size = n
-
-    @property
     def depth(self):
         count = 0
         if self.num_children > 0:
             for c in self.children:
                 child_depth = c.depth
                 if child_depth > count:
-                    count = child_depth
+                    count = child_depth()
             count += 1
-        self._depth = count
-        return self._depth
-    
-    @depth.setter
-    def depth(self, n):
-        self._depth = n
+        
+        return count
     
     @property
     def num_children(self):
