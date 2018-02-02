@@ -5,29 +5,62 @@ from torch.autograd import Variable as Var
 
 import utils
 # TODO: binary tree for constituency; weight initialization
-
-# module for childsumtreelstm
-class ChildSumTreeLSTM(nn.Module):
-    def __init__(self, in_dim, mem_dim):
+class TreeRNNBase(nn.Module):
+    def __init__(self, in_dim, mem_dim, dropout=0):
         super().__init__()
+        
         self.in_dim = in_dim
         self.mem_dim = mem_dim
+        self.dropout_ratio = dropout
+        
+        self.forward_dropout = nn.Dropout(p=self.dropout_ratio)
+    
+    def rand_init(self):
+        raise NotImplementedError
+        
+    def node_forward(self, inputs, child_c, child_h):
+        raise NotImplementedError
+        
+    def forward(self, tree, inputs):
+        raise NotImplementedError
+        
+# module for childsumtreelstm
+class ChildSumTreeLSTM(TreeRNNBase):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
         self.ioux = nn.Linear(self.in_dim, 3 * self.mem_dim, bias=True) # ioux is reponsible for bias
         self.iouh = nn.Linear(self.mem_dim, 3 * self.mem_dim, bias=False)
+        
         self.fx = nn.Linear(self.in_dim, self.mem_dim, bias=True) # responsible for bias
         self.fh = nn.Linear(self.mem_dim, self.mem_dim, bias=False)
+        
         self.reg_params = [self.ioux, self.iouh, self.fx, self.fh]
 
+    def rand_init(self):
+        """
+        Initialize
+        """
+        # initialize weights
+        for p in [self.ioux, self.iouh, self.fx, self.fh]:
+            utils.init_weight(p.weight)
+        
+        # initialize forget gate bias
+        self.ioux.bias.data.zero_()
+        self.fx.bias.data[:] = 1
+        
     def node_forward(self, inputs, child_c, child_h):
         child_h_sum = torch.sum(child_h, dim=0, keepdim=True)
-
-        iou = self.ioux(inputs) + self.iouh(child_h_sum)
+        
+        d_inputs = self.forward_dropout(inputs) # apply forward dropout
+        
+        iou = self.ioux(d_inputs) + self.iouh(child_h_sum)
         i, o, u = torch.split(iou, iou.size(1) // 3, dim=1)
         i, o, u = F.sigmoid(i), F.sigmoid(o), F.tanh(u)
 
         f = F.sigmoid(
                 self.fh(child_h) +
-                self.fx(inputs).repeat(len(child_h), 1)
+                self.fx(d_inputs).repeat(len(child_h), 1)
             ) # [num_children, mem_dim]
         fc = torch.mul(f, child_c)
 
@@ -48,21 +81,30 @@ class ChildSumTreeLSTM(nn.Module):
         return tree[-1].state
 
 # Module for binary tree lstm 
-class BinaryTreeLSTM(nn.Module):
-    def __init__(self, in_dim, mem_dim):
+class BinaryTreeLSTM(TreeRNNBase):
+    def __init__(self, *args, **kwargs):
         """
         Args:
             bf: branching factor, int
         """
-        super().__init__()
-        self.in_dim = in_dim
-        self.mem_dim = mem_dim
+        super().__init__(*args, **kwargs)
+        
         self.bf = 2
         
         self.fioux = nn.Linear(self.in_dim, 4 * self.mem_dim, bias=True) # responsible for bias
         self.iouh = nn.Linear(self.bf * self.mem_dim, self.mem_dim * 3, bias=False)
         self.fh = nn.Linear(self.bf * self.mem_dim, self.bf * self.mem_dim, bias=False)
+        
         self.reg_params = [self.fioux, self.iouh, self.fh]
+    
+    def rand_init(self):
+        # initialize weight
+        for p in [self.fioux, self.iouh, self.fh]:
+            utils.init_weight(p.weight)
+        
+        # initialize forget gate bias
+        self.fioux.bias.data.zero_()
+        self.fioux.bias.data[:self.mem_dim] = 1
         
     def node_forward(self, inputs, child_c, child_h):
         """
@@ -73,7 +115,9 @@ class BinaryTreeLSTM(nn.Module):
             c, h: FloatTensor [1, mem_dim]
         """
         inputs = inputs.view(1, -1)
-        fioux = self.fioux(inputs) # [1, 4*mem_dim]
+        d_inputs = self.forward_dropout(inputs)
+        
+        fioux = self.fioux(d_inputs) # [1, 4*mem_dim]
         fx, ix, ox, ux = torch.split(fioux, fioux.size(1) // 4, dim=1) # [1, mem_dim]
         iouh = self.iouh(child_h)
         ih, oh, uh = torch.split(iouh, iouh.size(1) // 3, dim=1) # [1, mem_dim]
@@ -143,9 +187,9 @@ class RelationTreeLSTM(nn.Module):
             self.position_embeds = nn.Embedding(self.position_size, self.position_dim)
             
         if args.childsum_tree:
-            self.treelstm = ChildSumTreeLSTM(self.embedding_dim + 2*self.position_dim, self.hidden_dim)
+            self.treelstm = ChildSumTreeLSTM(self.embedding_dim + 2*self.position_dim, self.hidden_dim, dropout=self.dropout_ratio)
         else:
-            self.treelstm = BinaryTreeLSTM(self.embedding_dim + 2*self.position_dim, self.hidden_dim)
+            self.treelstm = BinaryTreeLSTM(self.embedding_dim + 2*self.position_dim, self.hidden_dim, dropout=self.dropout_ratio)
             
         self.linear = nn.Linear(self.hidden_dim, self.tagset_size)
         self.dropout1 = nn.Dropout(p=self.dropout_ratio)
@@ -168,12 +212,7 @@ class RelationTreeLSTM(nn.Module):
             pre_word_embeddings (self.word_size, self.word_dim) : pre-trained embedding
         """
         assert (pre_embeddings.size()[1] == self.embedding_dim)
-        self.word_embeds.weight = nn.Parameter(pre_embeddings)
-
-    def rand_init_embedding(self):
-        utils.init_embedding(self.word_embeds.weight)
-        if self.position:
-            utils.init_embedding(self.position_embeds.weight)
+        self.word_embeds.weight = nn.Parameter(pre_embeddings)        
         
     def rand_init(self, init_embedding=False):
         """
@@ -183,7 +222,14 @@ class RelationTreeLSTM(nn.Module):
             init_embedding: random initialize word embedding or not
         """
         if init_embedding:
-            self.rand_init_embedding()
+            utils.init_embedding(self.word_embeds.weight)
+            
+        if self.position:
+            utils.init_embedding(self.position_embeds.weight)
+        # initialize tree
+        self.treelstm.rand_init()
+        
+        # initialize linear layer
         utils.init_linear(self.linear)
         
     def update_part_embedding(self, indices):
