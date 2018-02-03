@@ -14,6 +14,7 @@ class TreeRNNBase(nn.Module):
         self.dropout_ratio = dropout
         
         self.forward_dropout = nn.Dropout(p=self.dropout_ratio)
+        self.semeniuta_dropout = nn.Dropout(p=self.dropout_ratio)
     
     def rand_init(self):
         raise NotImplementedError
@@ -64,7 +65,7 @@ class ChildSumTreeLSTM(TreeRNNBase):
             ) # [num_children, mem_dim]
         fc = torch.mul(f, child_c)
 
-        c = torch.mul(i, u) + torch.sum(fc, dim=0, keepdim=True)
+        c = torch.mul(i, self.semeniuta_dropout(u)) + torch.sum(fc, dim=0, keepdim=True)
         h = torch.mul(o, F.tanh(c))
         return c, h
 
@@ -128,7 +129,7 @@ class BinaryTreeLSTM(TreeRNNBase):
         
         fc = torch.mul(f, child_c).view(-1, self.mem_dim) # [bf, mem_dim]
 
-        c = torch.mul(i, u) + torch.sum(fc, dim=0, keepdim=True)
+        c = torch.mul(i, self.semeniuta_dropout(u)) + torch.sum(fc, dim=0, keepdim=True)
         h = torch.mul(o, F.tanh(c))
         return c, h        
         
@@ -245,8 +246,7 @@ class RelationTreeLSTM(nn.Module):
 #            position_emb = torch.cat([position_emb[0:position_emb.size(0)//2], position_emb[position_emb.size(0)//2:]], dim=1)
             inputs_emb = torch.cat([inputs_emb, position_emb], dim=1)
             
-        d_inputs_emb = self.dropout1(inputs_emb)
-        state, hidden = self.treelstm(tree, d_inputs_emb)
+        state, hidden = self.treelstm(tree, inputs_emb)
         d_state = self.dropout2(state)
         output = self.linear(d_state) # output: tagset_size
         return {'output' :output}, hidden
