@@ -108,6 +108,8 @@ def add_model_args(parser):
                        help='specify way to represent sentence')
     group.add_argument('--childsum_tree', action='store_true',
                        help='use dependency tree; otherwise use constituency tree')
+    group.add_argument('--gru', action='store_true',
+                       help='use GRU instead of LSTM')
     
     return group
 

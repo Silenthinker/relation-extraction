@@ -19,11 +19,89 @@ class TreeRNNBase(nn.Module):
     def rand_init(self):
         raise NotImplementedError
         
-    def node_forward(self, inputs, child_c, child_h):
+    def node_forward(self, *args):
         raise NotImplementedError
         
     def forward(self, tree, inputs):
         raise NotImplementedError
+        
+class BinaryTreeGRU(TreeRNNBase):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        self.bf = 2
+        
+        self.grzx = nn.Linear(self.in_dim, 3 * self.mem_dim, bias=True)
+        self.rzh = nn.Linear(self.mem_dim, 2 * self.mem_dim, bias=False)
+        self.gh = nn.Linear(self.mem_dim, self.mem_dim, bias=False)
+        
+        self.reg_params = [self.grzx, self.rzh, self.gh]
+        
+    def rand_init(self):
+        # initialize weight
+        for p in [self.grzx, self.rzh, self.gh]:
+            utils.init_weight(p.weight)
+        
+        # initialize forget gate bias
+        self.grzx.bias.data.zero_()
+        self.grzx.bias.data[self.mem_dim:] = 1 # bias for z and r gate is init to 1
+        
+    def node_forward(self, inputs, child_h):
+        """
+        Args:
+            inputs: FloatTensor [in_dim]
+            child_h: FloatTensor [2, mem_dim]
+        Returns:
+            h: FloatTensor [1, mem_dim]
+        """
+        
+        inputs = inputs.view(1, -1)
+        d_inputs = self.forward_dropout(inputs)
+        gx, rx, zx = torch.split(self.grzx(d_inputs), self.mem_dim, dim=1) # [1, mem_dim]
+        rh, zh = torch.split(self.rzh(child_h), self.mem_dim, dim=1) # split input: [2, 2*mem_dim] => [2, mem_dim]
+        
+        r = F.sigmoid(rx.repeat(self.bf, 1) + rh) # [2, mem_dim]
+        z = F.sigmoid(zx.repeat(self.bf, 1) + zh)
+        
+        g = F.tanh(gx + self.gh(torch.sum(torch.mul(r, child_h), dim=0))) # [1, mem_dim]
+        
+        h = torch.sum(torch.mul(z, child_h), dim=0) + torch.mul((1 - 0.5 * torch.sum(z, dim=0)), g)
+        
+        return h
+        
+    def forward(self, tree, inputs):
+        
+        def _zeros(dim):
+            return Var(inputs[0].data.new(1, dim).fill_(0.))
+        
+        def _initialize_child_tensor(left=None, right=None):
+            """
+            Initialize tensor
+            Return:
+                Tensor [2, mem_dim]
+            """
+            if left is None:
+                left = _zeros(self.mem_dim)
+            if right is None:
+                right = _zeros(self.mem_dim)
+                
+            return torch.cat([left, right], dim=0)
+        
+        for node in tree:
+            left_h, right_h = None, None
+            
+            x = _zeros(self.in_dim) if node.num_children > 0 else inputs[node.idx] # input is zero only if node is internal
+            
+            if node.num_children >= 1:
+                left_h = node.children[0].state
+            if node.num_children == 2:
+                right_h = node.children[1].state            
+        
+            child_h = _initialize_child_tensor(left_h, right_h)
+    
+            node.state = self.node_forward(x, child_h)
+        
+        return tree[-1].state
         
 # module for childsumtreelstm
 class ChildSumTreeLSTM(TreeRNNBase):
@@ -170,7 +248,7 @@ class BinaryTreeLSTM(TreeRNNBase):
         
         return tree[-1].state
     
-class RelationTreeLSTM(nn.Module):
+class RelationTreeModel(nn.Module):
     def __init__(self, vocab_size, tagset_size, args):
         super().__init__()
         self.args = args
@@ -186,16 +264,20 @@ class RelationTreeLSTM(nn.Module):
         
         if self.position:
             self.position_embeds = nn.Embedding(self.position_size, self.position_dim)
-            
+        
+        in_dim = self.embedding_dim + 2*self.position_dim
         if args.childsum_tree:
-            self.treelstm = ChildSumTreeLSTM(self.embedding_dim + 2*self.position_dim, self.hidden_dim, dropout=self.dropout_ratio)
+            self.treernn = ChildSumTreeLSTM(in_dim, self.hidden_dim, dropout=self.dropout_ratio)
         else:
-            self.treelstm = BinaryTreeLSTM(self.embedding_dim + 2*self.position_dim, self.hidden_dim, dropout=self.dropout_ratio)
+            if args.gru:
+                self.treernn = BinaryTreeGRU(in_dim, self.hidden_dim, dropout=self.dropout_ratio)
+            else:
+                self.treernn = BinaryTreeLSTM(in_dim, self.hidden_dim, dropout=self.dropout_ratio)
             
         self.linear = nn.Linear(self.hidden_dim, self.tagset_size)
         self.dropout1 = nn.Dropout(p=self.dropout_ratio)
         self.dropout2 = nn.Dropout(p=self.dropout_ratio)
-        self.reg_params = [self.linear] + self.treelstm.reg_params
+        self.reg_params = [self.linear] + self.treernn.reg_params
       
     @property
     def reg_params(self):
@@ -228,7 +310,7 @@ class RelationTreeLSTM(nn.Module):
         if self.position:
             utils.init_embedding(self.position_embeds.weight)
         # initialize tree
-        self.treelstm.rand_init()
+        self.treernn.rand_init()
         
         # initialize linear layer
         utils.init_linear(self.linear)
@@ -246,9 +328,13 @@ class RelationTreeLSTM(nn.Module):
 #            position_emb = torch.cat([position_emb[0:position_emb.size(0)//2], position_emb[position_emb.size(0)//2:]], dim=1)
             inputs_emb = torch.cat([inputs_emb, position_emb], dim=1)
             
-        state, hidden = self.treelstm(tree, inputs_emb)
-        d_state = self.dropout2(state)
-        output = self.linear(d_state) # output: tagset_size
+        state = self.treernn(tree, inputs_emb)
+        if len(state) == 2:
+            hidden = state[1]
+        else:
+            hidden = state
+        d_hidden = self.dropout2(hidden)
+        output = self.linear(d_hidden) # output: tagset_size
         return {'output' :output}, hidden
     
     def predict(self, tree, inputs, pos=None):

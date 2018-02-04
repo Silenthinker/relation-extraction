@@ -25,7 +25,7 @@ from torch import multiprocessing as mp
 import utils
 import options
 import meters
-from model.tree_lstm import RelationTreeLSTM
+from model.tree_lstm import RelationTreeModel
 import data.ddi2013 as ddi2013
 from trainer import TreeTrainer
 
@@ -157,7 +157,7 @@ def main():
     # build model
     vocab_size = len(feature_map)
     tagset_size = len(target_map)
-    model = RelationTreeLSTM(vocab_size, tagset_size, args)
+    model = RelationTreeModel(vocab_size, tagset_size, args)
     
     # loss
     criterion = utils.build_loss(args, class_weights=class_weights)
