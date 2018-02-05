@@ -32,7 +32,7 @@ class BinaryTreeGRU(TreeRNNBase):
         self.bf = 2
         
         self.grzx = nn.Linear(self.in_dim, 3 * self.mem_dim, bias=True)
-        self.rzh = nn.Linear(self.mem_dim, 2 * self.mem_dim, bias=False)
+        self.rzh = nn.Linear(self.bf * self.mem_dim, 2 * self.bf * self.mem_dim, bias=False)
         self.gh = nn.Linear(self.mem_dim, self.mem_dim, bias=False)
         
         self.reg_params = [self.grzx, self.rzh, self.gh]
@@ -50,22 +50,27 @@ class BinaryTreeGRU(TreeRNNBase):
         """
         Args:
             inputs: FloatTensor [in_dim]
-            child_h: FloatTensor [2, mem_dim]
+            child_h: FloatTensor [1, 2 * mem_dim]
         Returns:
             h: FloatTensor [1, mem_dim]
         """
         
-        inputs = inputs.view(1, -1)
+        inputs = inputs.view(1, -1) # [1, in_dim]
         d_inputs = self.forward_dropout(inputs)
-        gx, rx, zx = torch.split(self.grzx(d_inputs), self.mem_dim, dim=1) # [1, mem_dim]
-        rh, zh = torch.split(self.rzh(child_h), self.mem_dim, dim=1) # split input: [2, 2*mem_dim] => [2, mem_dim]
         
-        r = F.sigmoid(rx.repeat(self.bf, 1) + rh) # [2, mem_dim]
-        z = F.sigmoid(zx.repeat(self.bf, 1) + zh)
+        grzx = self.grzx(d_inputs)
+        gx, rzx = grzx[:, :self.mem_dim], grzx[:, self.mem_dim:] # [1, mem_dim], [1, 2*mem_dim]
+        
+        rzh = self.rzh(child_h) # [1, 4*mem_dim]
+        rz = F.sigmoid(rzx.repeat(1, self.bf) + rzh)
+        r, z = torch.split(rz, self.bf * self.mem_dim, dim=1)
+        r, z = r.view(self.bf, -1), z.view(self.bf, -1)
+        
+        child_h = child_h.view(self.bf, -1)
         
         g = F.tanh(gx + self.gh(torch.sum(torch.mul(r, child_h), dim=0))) # [1, mem_dim]
         
-        h = torch.sum(torch.mul(z, child_h), dim=0) + torch.mul((1 - 0.5 * torch.sum(z, dim=0)), g)
+        h = torch.sum(torch.mul(z, child_h), dim=0) + torch.mul((1 - torch.sum(z, dim=0) / self.bf), self.semeniuta_dropout(g))
         
         return h
         
@@ -78,14 +83,14 @@ class BinaryTreeGRU(TreeRNNBase):
             """
             Initialize tensor
             Return:
-                Tensor [2, mem_dim]
+                Tensor [1, 2*mem_dim]
             """
             if left is None:
                 left = _zeros(self.mem_dim)
             if right is None:
                 right = _zeros(self.mem_dim)
                 
-            return torch.cat([left, right], dim=0)
+            return torch.cat([left, right], dim=1)
         
         for node in tree:
             left_h, right_h = None, None
