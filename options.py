@@ -110,6 +110,8 @@ def add_model_args(parser):
                        help='use dependency tree; otherwise use constituency tree')
     group.add_argument('--gru', action='store_true',
                        help='use GRU instead of LSTM')
+    group.add_argument('--attention', action='store_true', 
+                       help='use (self) attention; only applicable to tree model')
     
     return group
 

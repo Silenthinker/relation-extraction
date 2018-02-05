@@ -4,7 +4,34 @@ import torch.nn.functional as F
 from torch.autograd import Variable as Var
 
 import utils
-# TODO: binary tree for constituency; weight initialization
+
+class IntraAttention(nn.Module):
+    """
+    self-attention: 1-layer MLP
+    """
+    def __init__(self, in_dim):
+        super().__init__()
+        self.w = nn.Linear(in_dim, in_dim, bias=False)
+        self.dropout = nn.Dropout()
+        
+        self.reg_params = [self.w]
+     
+    def rand_init(self):
+        utils.init_linear(self.w)
+        
+    def forward(self, inputs):
+        """
+        Args:
+            inputs: [N, in_dim]
+        Return:
+            weight of input: [N, in_dim]
+        """
+      
+        out = self.w(F.tanh(self.dropout(inputs))) # [N, in_dim]
+        att_weight = F.softmax(out, dim=1)
+        
+        return att_weight
+    
 class TreeRNNBase(nn.Module):
     def __init__(self, in_dim, mem_dim, dropout=0):
         super().__init__()
@@ -83,7 +110,7 @@ class BinaryTreeGRU(TreeRNNBase):
             """
             Initialize tensor
             Return:
-                Tensor [1, 2*mem_dim]
+                [Tensor], [1, mem_dim]
             """
             if left is None:
                 left = _zeros(self.mem_dim)
@@ -106,7 +133,7 @@ class BinaryTreeGRU(TreeRNNBase):
     
             node.state = self.node_forward(x, child_h)
         
-        return tree[-1].state
+        return [node.state for node in tree]
         
 # module for childsumtreelstm
 class ChildSumTreeLSTM(TreeRNNBase):
@@ -162,7 +189,8 @@ class ChildSumTreeLSTM(TreeRNNBase):
                 child_c, child_h = torch.cat(child_c, dim=0), torch.cat(child_h, dim=0) # child_c, child_h: [num_children, mem_dim]
     
             node.state = self.node_forward(inputs[node.idx], child_c, child_h)
-        return tree[-1].state
+            
+        return [node.state[1] for node in tree]
 
 # Module for binary tree lstm 
 class BinaryTreeLSTM(TreeRNNBase):
@@ -251,12 +279,13 @@ class BinaryTreeLSTM(TreeRNNBase):
     
             node.state = self.node_forward(x, child_c, child_h)
         
-        return tree[-1].state
+        return [node.state[1] for node in tree]
     
 class RelationTreeModel(nn.Module):
     def __init__(self, vocab_size, tagset_size, args):
         super().__init__()
         self.args = args
+        self.enable_att = args.attention
         self.dropout_ratio = args.dropout_ratio
         self.embedding_dim = args.embedding_dim
         self.position = args.position
@@ -271,6 +300,8 @@ class RelationTreeModel(nn.Module):
             self.position_embeds = nn.Embedding(self.position_size, self.position_dim)
         
         in_dim = self.embedding_dim + 2*self.position_dim
+        
+        # build tree model
         if args.childsum_tree:
             self.treernn = ChildSumTreeLSTM(in_dim, self.hidden_dim, dropout=self.dropout_ratio)
         else:
@@ -278,11 +309,17 @@ class RelationTreeModel(nn.Module):
                 self.treernn = BinaryTreeGRU(in_dim, self.hidden_dim, dropout=self.dropout_ratio)
             else:
                 self.treernn = BinaryTreeLSTM(in_dim, self.hidden_dim, dropout=self.dropout_ratio)
+        
+        # attention
+        if self.enable_att:
+            self.attention = IntraAttention(self.hidden_dim)
             
         self.linear = nn.Linear(self.hidden_dim, self.tagset_size)
         self.dropout1 = nn.Dropout(p=self.dropout_ratio)
         self.dropout2 = nn.Dropout(p=self.dropout_ratio)
         self.reg_params = [self.linear] + self.treernn.reg_params
+        if self.enable_att:
+            self.reg_params += self.attention.reg_params
       
     @property
     def reg_params(self):
@@ -314,6 +351,10 @@ class RelationTreeModel(nn.Module):
             
         if self.position:
             utils.init_embedding(self.position_embeds.weight)
+            
+        if self.enable_att:
+            self.attention.rand_init()
+            
         # initialize tree
         self.treernn.rand_init()
         
@@ -325,6 +366,7 @@ class RelationTreeModel(nn.Module):
         self.word_embeds.weight.register_hook(hook)
         
     def forward(self, tree, inputs, pos=None):
+        output_dict = {}
         inputs_emb = self.word_embeds(inputs) # [seq_len, w_emb_dim]
         if self.position:
             assert pos is not None
@@ -333,14 +375,19 @@ class RelationTreeModel(nn.Module):
 #            position_emb = torch.cat([position_emb[0:position_emb.size(0)//2], position_emb[position_emb.size(0)//2:]], dim=1)
             inputs_emb = torch.cat([inputs_emb, position_emb], dim=1)
             
-        state = self.treernn(tree, inputs_emb)
-        if len(state) == 2:
-            hidden = state[1]
+        hiddens = self.treernn(tree, inputs_emb)
+        
+        if self.enable_att:
+            hiddens = torch.cat(hiddens, dim=0)
+            att_weight = self.attention(hiddens) # [N, hidden_dim]
+            sent_rep = torch.sum(torch.mul(att_weight, hiddens), keepdim=True, dim=0) # [1, hidden_dim]
+            output_dict['att'] = att_weight
         else:
-            hidden = state
-        d_hidden = self.dropout2(hidden)
-        output = self.linear(d_hidden) # output: tagset_size
-        return {'output' :output}, hidden
+            sent_rep = hiddens[-1]
+        d_sent_rep = self.dropout2(sent_rep)
+        output = self.linear(d_sent_rep) # output: tagset_size
+        output_dict['output'] = output
+        return output_dict, d_sent_rep
     
     def predict(self, tree, inputs, pos=None):
         output_dict, _ = self.forward(tree, inputs, pos)
