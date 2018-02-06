@@ -133,7 +133,7 @@ class BinaryTreeGRU(TreeRNNBase):
     
             node.state = self.node_forward(x, child_h)
         
-        return [node.state for node in tree]
+        return [(node.state, node.state) for node in tree]
         
 # module for childsumtreelstm
 class ChildSumTreeLSTM(TreeRNNBase):
@@ -190,7 +190,7 @@ class ChildSumTreeLSTM(TreeRNNBase):
     
             node.state = self.node_forward(inputs[node.idx], child_c, child_h)
             
-        return [node.state[1] for node in tree]
+        return [node.state for node in tree]
 
 # Module for binary tree lstm 
 class BinaryTreeLSTM(TreeRNNBase):
@@ -279,13 +279,14 @@ class BinaryTreeLSTM(TreeRNNBase):
     
             node.state = self.node_forward(x, child_c, child_h)
         
-        return [node.state[1] for node in tree]
+        return [node.state for node in tree]
     
 class RelationTreeModel(nn.Module):
     def __init__(self, vocab_size, tagset_size, args):
         super().__init__()
         self.args = args
         self.enable_att = args.attention
+        self.use_cell = args.use_cell
         self.dropout_ratio = args.dropout_ratio
         self.embedding_dim = args.embedding_dim
         self.position = args.position
@@ -375,7 +376,9 @@ class RelationTreeModel(nn.Module):
 #            position_emb = torch.cat([position_emb[0:position_emb.size(0)//2], position_emb[position_emb.size(0)//2:]], dim=1)
             inputs_emb = torch.cat([inputs_emb, position_emb], dim=1)
             
-        hiddens = self.treernn(tree, inputs_emb)
+        states = self.treernn(tree, inputs_emb)
+        idx = 0 if self.use_cell else 1 # use cell or hidden states
+        hiddens = [state[idx] for state in states]
         
         if self.enable_att:
             hiddens = torch.cat(hiddens, dim=0)
