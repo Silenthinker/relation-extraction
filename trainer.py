@@ -62,7 +62,7 @@ class BasicTrainer:
         if self.args.lr_scheduler == 'rop':
             lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer,
                                                                       factor=self.args.lr_decay,
-                                                                      patience=self.args.patience) # default mode: min
+                                                                      patience=1) # default mode: min
         elif self.args.lr_scheduler == 'lambdalr':
             lr_scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lambda epoch: 1. / (1 + epoch * self.args.lr_decay))
         else:

@@ -11,7 +11,7 @@ class IntraAttention(nn.Module):
     """
     def __init__(self, in_dim):
         super().__init__()
-        self.w = nn.Linear(in_dim, in_dim, bias=False)
+        self.w = nn.Linear(in_dim, 1, bias=False)
         self.dropout = nn.Dropout()
         
         self.reg_params = [self.w]
@@ -24,10 +24,10 @@ class IntraAttention(nn.Module):
         Args:
             inputs: [N, in_dim]
         Return:
-            weight of input: [N, in_dim]
+            weight of input: [N, 1]
         """
       
-        out = self.w(F.tanh(self.dropout(inputs))) # [N, in_dim]
+        out = self.w(F.tanh(self.dropout(inputs))) # [N, 1]
         att_weight = F.softmax(out, dim=1)
         
         return att_weight
@@ -381,9 +381,9 @@ class RelationTreeModel(nn.Module):
         hiddens = [state[idx] for state in states]
         
         if self.enable_att:
-            hiddens = torch.cat(hiddens, dim=0)
-            att_weight = self.attention(hiddens) # [N, hidden_dim]
-            sent_rep = torch.sum(torch.mul(att_weight, hiddens), keepdim=True, dim=0) # [1, hidden_dim]
+            hiddens = torch.cat(hiddens, dim=0) # [N, hidden_dim]
+            att_weight = self.attention(hiddens).view(1, -1) # [1, N]
+            sent_rep = torch.mm(att_weight, hiddens) # [1, hidden_dim]
             output_dict['att'] = att_weight
         else:
             sent_rep = hiddens[-1]

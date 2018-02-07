@@ -215,7 +215,7 @@ def main():
 
                 
         # update lr
-        trainer.lr_step()
+        trainer.lr_step(epoch_loss)
         
         dev_prec, dev_rec, dev_f1, dev_loss = evaluate(trainer, val_loader, target_map, cuda=args.cuda)
         if dev_f1 >= best_f1:
