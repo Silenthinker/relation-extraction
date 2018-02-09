@@ -5,6 +5,37 @@ from torch.autograd import Variable as Var
 
 import utils
 
+'''
+class IntraAttention(nn.Module):
+    """
+    self-attention: 1-layer MLP
+    """
+    def __init__(self, in_dim, att_dim):
+        super().__init__()
+        self.w1 = nn.Linear(in_dim, att_dim, bias=False)
+        self.w2 = nn.Linear(att_dim, 1, bias=False)
+        self.dropout = nn.Dropout()
+        
+        self.reg_params = [self.w1, self.w2]
+     
+    def rand_init(self):
+        utils.init_linear(self.w1)
+        utils.init_linear(self.w2)
+        
+    def forward(self, inputs):
+        """
+        Args:
+            inputs: [N, in_dim]
+        Return:
+            weight of input: [N, 1]
+        """
+        out = self.w1(self.dropout(inputs)) # [N, att_dim]
+        out = self.w2(F.tanh(out)) # [N, 1]
+        att_weight = F.softmax(out, dim=0)
+        
+        return att_weight
+'''
+
 class IntraAttention(nn.Module):
     """
     self-attention: 1-layer MLP
@@ -26,11 +57,10 @@ class IntraAttention(nn.Module):
         Return:
             weight of input: [N, 1]
         """
-      
         out = self.w(F.tanh(self.dropout(inputs))) # [N, 1]
-        att_weight = F.softmax(out, dim=1)
+        att_weight = F.softmax(out, dim=0)
         
-        return att_weight
+        return att_weight    
     
 class TreeRNNBase(nn.Module):
     def __init__(self, in_dim, mem_dim, dropout=0):
@@ -289,6 +319,7 @@ class RelationTreeModel(nn.Module):
         self.use_cell = args.use_cell
         self.dropout_ratio = args.dropout_ratio
         self.embedding_dim = args.embedding_dim
+        self.att_dim = args.att_hidden_dim
         self.position = args.position
         self.position_dim = args.position_dim if self.position else 0
         self.position_bound = args.position_bound

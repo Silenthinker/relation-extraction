@@ -98,7 +98,7 @@ def add_model_args(parser):
                        help='dropout ratio')
     group.add_argument('--rand_embedding', action='store_true', 
                        help='use randomly initialized word embeddings')
-    group.add_argument('--att_hidden_dim', type=int, default=200, 
+    group.add_argument('--att_hidden_dim', type=int, default=100, 
                        help='attention hidden dimension')
     group.add_argument('--num_hops', type=int, default=1, 
                        help='number of hops of attention')
