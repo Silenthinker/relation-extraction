@@ -61,7 +61,7 @@ def evaluate(trainer, data_loader, t_map, cuda=False):
         for sample in pbar:
             target = sample['target']
             loss = trainer.valid_step(sample)
-            pred = trainer.pred_step(sample)
+            _, pred = trainer.pred_step(sample)
             if cuda:
                 pred = pred.cpu() # cast back to cpu
             tot_loss += loss
@@ -254,6 +254,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-## TODO: 
-# tqdm updates loss, grad
-# residual connection using rnncell

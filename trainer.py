@@ -226,12 +226,18 @@ class TreeTrainer(BasicTrainer):
         
         self.model.eval()
         
-        res = []
+        preds = []
+        res = {}
         for feature, position, tree in zip(self._sample['feature'], self._sample['position'], self._sample['tree']):
-            _, pred = self.model.predict(tree, feature, position)
-            res.append(pred)
-#        print(sample['target'], pred)
-        return torch.stack(res, dim=0)
+            output_dict, pred = self.model.predict(tree, feature, position)
+            if not res:
+                res = {k:[v.data] for k, v in output_dict.items()}
+            else:
+                [res[k].append(v.data) for k, v in output_dict.items()]
+            preds.append(pred)
+        
+        res['output'] = torch.cat(res['output'], dim=0)
+        return res, torch.stack(preds, dim=0)
     
     def _prepare_sample(self, sample, volatile, cuda):
         """

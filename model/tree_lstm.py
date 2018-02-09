@@ -415,7 +415,7 @@ class RelationTreeModel(nn.Module):
             hiddens = torch.cat(hiddens, dim=0) # [N, hidden_dim]
             att_weight = self.attention(hiddens).view(1, -1) # [1, N]
             sent_rep = torch.mm(att_weight, hiddens) # [1, hidden_dim]
-            output_dict['att'] = att_weight
+            output_dict['att_weight'] = att_weight
         else:
             sent_rep = hiddens[-1]
         d_sent_rep = self.dropout2(sent_rep)
