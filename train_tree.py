@@ -105,7 +105,7 @@ def main():
         os.mkdir(checkpoint_dir)
     
     # load dataset
-    train_raw_corpus, val_raw_corpus, test_raw_corpus = utils.load_corpus(args.processed_dir)
+    train_raw_corpus, val_raw_corpus, test_raw_corpus = utils.load_corpus(args.processed_dir, ddi=False)
     assert train_raw_corpus and val_raw_corpus and test_raw_corpus, 'Corpus not found, please run preprocess.py to obtain corpus!'
     train_corpus = [(line.sent, line.type, line.p1, line.p2) for line in train_raw_corpus]
     val_corpus = [(line.sent, line.type, line.p1, line.p2) for line in val_raw_corpus]    
