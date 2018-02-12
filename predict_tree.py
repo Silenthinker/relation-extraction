@@ -48,15 +48,15 @@ def predict(trainer, data_loader, t_map, cuda=False):
             loss = trainer.valid_step(sample)
             output_dict, pred = trainer.pred_step(sample)
             if 'att_weight' in output_dict:
-                att_weight = output_dict['att_weight'].data
-                att_weights.append(att_weight.numpy().tolist())
+                att_weight = [item.data.numpy().tolist() for item in output_dict['att_weight']]
                 
             if cuda:
                 pred = pred.cpu() # cast back to cpu
-                att_weight = att_weight.data
+                att_weight = [item.cpu() for item in att_weight]
             tot_loss += loss
             y_true.append(target.view(-1).numpy().tolist())
             y_pred.append(pred.view(-1).numpy().tolist())
+            att_weights.append(att_weight)
             loss_meter.update(loss)
             pbar.set_postfix(collections.OrderedDict([
                     ('loss', '{:.4f} ({:.4f})'.format(loss, loss_meter.avg))

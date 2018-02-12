@@ -93,6 +93,7 @@ def main():
     print(args)
     
     args.cuda = not args.disable_cuda and torch.cuda.is_available()
+    torch.manual_seed(5)
     
     if args.cuda:
         torch.backends.cudnn.benchmark = True

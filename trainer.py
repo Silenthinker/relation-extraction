@@ -235,8 +235,9 @@ class TreeTrainer(BasicTrainer):
             else:
                 [res[k].append(v.data) for k, v in output_dict.items()]
             preds.append(pred)
-        
+            
         res['output'] = torch.cat(res['output'], dim=0)
+        
         return res, torch.stack(preds, dim=0)
     
     def _prepare_sample(self, sample, volatile, cuda):
