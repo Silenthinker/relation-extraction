@@ -183,15 +183,18 @@ def main():
     
     # trainer
     trainer = TreeTrainer(args, model, criterion)
-        
+    
+    best_f1 = float('-inf')
+    
     if os.path.isfile(args.load_checkpoint):
         dev_prec, dev_rec, dev_f1, _ = evaluate(trainer, val_loader, target_map, cuda=args.cuda)
         test_prec, test_rec, test_f1, _ = evaluate(trainer, test_loader, target_map, cuda=args.cuda)
+        best_f1 = dev_f1
         print('checkpoint dev_prec: {:.4f}, dev_rec: {:.4f}, dev_f1: {:.4f}, test_prec: {:.4f}, test_rec: {:.4f}, test_f1: {:.4f}'.format(
             dev_prec, dev_rec, dev_f1, test_prec, test_rec, test_f1))
         
     track_list = []
-    best_f1 = float('-inf')
+    
     patience_count = 0
     start_time = time.time()
     q = mp.Queue()
