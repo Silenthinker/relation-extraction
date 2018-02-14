@@ -300,23 +300,33 @@ class DDI2013SeqDataset(Dataset):
         return res
 
 class DDI2013TreeDataset(Dataset):
-    def __init__(self, path, mapping, caseless, dep=True):
+    def __init__(self, mapping, caseless, path=None, dep=True, data=None):
         super().__init__()
+        
+        assert path is not None or (data is not None), 'Either path or data should be provided.'
         
         self.mapping = mapping
         self.caseless = caseless
         self.dep = dep
-        _const = '' if dep else 'c'
-        sentences = self.read_sentences(os.path.join(path, 'sent.' + _const + 'toks'))
-        self.sentences = self.build_features(sentences)
-        self.trees = self.read_trees(os.path.join(path, 'sent.' + _const + 'parents'))
-        self.labels = self.read_labels(os.path.join(path, 'other.txt'))
-        positions = self.build_positions(sentences)
-        self.positions = self.build_features(positions)
-        self.size = self.labels.size(0)
         
-        # sanity check
-        self._sanity_check(os.path.join(path, 'sent.' + _const + 'toks'))
+        if path is not None:
+            _const = '' if dep else 'c'
+            sentences = self.read_sentences(os.path.join(path, 'sent.' + _const + 'toks'))
+            self.sentences = self.build_features(sentences) # [tensor]
+            self.trees = self.read_trees(os.path.join(path, 'sent.' + _const + 'parents')) # [Tree]
+            self.labels = self.read_labels(os.path.join(path, 'other.txt')) # [tensor]
+            positions = self.build_positions(sentences)
+            self.positions = self.build_features(positions) # tensor
+            # sanity check
+            self._sanity_check(os.path.join(path, 'sent.' + _const + 'toks'))
+        else:
+            sentences, positions, trees, labels = data
+            self.sentences = sentences
+            self.trees = trees
+            self.labels = labels
+            self.positions = positions
+        
+        self.size = self.labels.size(0)
 
     def __len__(self):
         return self.size
@@ -447,6 +457,8 @@ class DDI2013TreeDataset(Dataset):
     def read_labels(self, filename):
         """
         sent_id pair_id e1 e2 ddi type p1 p2
+        Return:
+            LongTensor: N*1
         """
         with open(filename, 'r') as f:
             labels = list(map(lambda x: [target_map[x.split('|')[5]]], f.readlines()))

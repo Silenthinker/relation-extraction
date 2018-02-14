@@ -97,8 +97,8 @@ def build_corpus(raw_corpus, feature_mapping, target_mapping, caseless):
     raw_positions = [chain.from_iterable([tup[2], tup[3]]) for tup in raw_corpus]
     features = [list(chain.from_iterable([f, p])) for f, p in zip(features, raw_positions)]
     targets = map_iterable(raw_targets, target_mapping)
-    return features, targets
-
+    return features, targets    
+    
 def stratified_shuffle_split(features, targets, train_size=0.9):
     """
     Args:

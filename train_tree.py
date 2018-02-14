@@ -126,15 +126,19 @@ def main():
     class_weights = torch.Tensor(utils.get_class_weights(train_targets)) if args.class_weight else None
     
     # load dataset
-    def load_datasets(data_dir, dataloader=True):
+    def load_datasets(data_dir, train_size, dataloader=True):
         """
         load train, val, and test dataset
         data_dir: dir of datasets
+        train_size: float
         dataloader: bool, True to return pytorch Dataloader
         """
         # splits = ['train', 'val', 'test']
         
-        def load_dataset(split):
+        def wrap_dataloader(dataset, shuffle):
+            return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=dataset.collate, drop_last=False)
+        
+        def load_dataset(split, dataloader):
             _const = 'c' if not args.childsum_tree else ''
             split_path = os.path.join(data_dir, split + '.' + _const + 'pth')
             split_dir = os.path.join(data_dir, split)
@@ -143,17 +147,35 @@ def main():
                 dataset = torch.load(split_path)
             else:
                 print('Building dataset from scratch...')
-                dataset = ddi2013.DDI2013TreeDataset(split_dir, feature_map, args.caseless, dep=args.childsum_tree)
+                dataset = ddi2013.DDI2013TreeDataset(feature_map, args.caseless, dep=args.childsum_tree, path=split_dir, )
                 print('Save dataset to {}'.format(split_path))
                 torch.save(dataset, split_path)
             if dataloader:
-                return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=split != 'test', collate_fn=dataset.collate, drop_last=False)
+                return wrap_dataloader(dataset, shuffle=split != 'test')
             else:
                 return dataset
-        return load_dataset('train'), load_dataset('val'), load_dataset('test')
+        
+        train, val, test = load_dataset('train', False), load_dataset('val', False), load_dataset('test', False)
+        
+        # concatenate and split
+        sentences = train.sentences + val.sentences
+        positions = train.positions + val.positions
+        trees = train.trees + val.trees
+        labels = torch.cat([train.labels, val.labels], dim=0)
+        
+        train_features, train_targets, val_features, val_targets = utils.stratified_shuffle_split(list(zip(sentences, positions, trees)), labels.numpy().tolist(), train_size=train_size)
+        train_targets, val_targets = torch.LongTensor(train_targets),  torch.LongTensor(val_targets)
+        train_data, val_data = list(zip(*train_features)), list(zip(*val_features))
+        train_data.append(train_targets)
+        val_data.append(val_targets)
+        
+        train = ddi2013.DDI2013TreeDataset(feature_map, args.caseless, dep=args.childsum_tree, data=train_data)
+        val = ddi2013.DDI2013TreeDataset(feature_map, args.caseless, dep=args.childsum_tree, data=val_data)
+        
+        return wrap_dataloader(train, True), wrap_dataloader(val, True), wrap_dataloader(test, False)
         
     
-    train_loader, val_loader, test_loader = load_datasets(args.processed_dir, dataloader=True)            
+    train_loader, val_loader, test_loader = load_datasets(args.processed_dir, train_size=args.train_size, dataloader=True)            
     
     # build model
     vocab_size = len(feature_map)
