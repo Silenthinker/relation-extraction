@@ -273,8 +273,25 @@ def save_checkpoint(state, track_list, filename):
         json.dump(track_list, f)
     torch.save(state, filename + '.model')
 
-# possibly deprecated
-def load_corpus(corpus_dir):
+def _load_corpus_txt(corpus_dir):
+    """
+    load tokenized sentences, for training tree models
+    """
+    ret = []
+    filename = 'sent.toks'
+    for d in ['train', 'val', 'test']:
+        path = os.path.join(corpus_dir, d, filename)
+        try:
+            with open(path, 'r') as f:
+                ret.append([line.strip().split() for line in f.readlines()])
+        except Exception as inst:
+            print(inst)
+            ret.append(None)
+        
+    train, val, test = ret
+    return train, val, test
+        
+def load_corpus(corpus_dir, ddi=True):
     """
     load ddi corpus
     """
@@ -297,10 +314,27 @@ def load_corpus(corpus_dir):
         except Exception as inst:
             print(inst)
         return corpus    
-    train_path = os.path.join(corpus_dir, 'train.ddi')
-    val_path = os.path.join(corpus_dir, 'val.ddi')
-    test_path = os.path.join(corpus_dir, 'test.ddi')
-    return load_file(train_path), load_file(val_path), load_file(test_path)
+    
+    ret = []
+    prefices = ['train', 'val', 'test']
+    for prefix in prefices:
+        path = os.path.join(corpus_dir, prefix + '.ddi')
+        ret.append(load_file(path))
+    
+    if not ddi:
+        filename = 'sent.toks'
+        
+        for i, prefix in enumerate(prefices):
+            path = os.path.join(corpus_dir, prefix, filename)
+            try:
+                with open(path, 'r') as f:
+                    for j, line in enumerate(f):
+                        ret[i][j] = ret[i][j]._replace(sent=line.strip().split())
+                    
+            except Exception as inst:
+                print(inst)
+    
+    return tuple(ret)
     
 def evaluate(y_true, y_pred, labels=None, target_names=None):
     """
