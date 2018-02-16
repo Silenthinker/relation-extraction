@@ -244,11 +244,10 @@ def main():
         trainer.lr_step(epoch_loss)
         
         dev_prec, dev_rec, dev_f1, dev_loss = evaluate(trainer, val_loader, target_map, cuda=args.cuda)
+        test_prec, test_rec, test_f1, _ = evaluate(trainer, test_loader, target_map, cuda=args.cuda)
         if dev_f1 >= best_f1:
             patience_count = 0
             best_f1 = dev_f1
-    
-            test_prec, test_rec, test_f1, _ = evaluate(trainer, test_loader, target_map, cuda=args.cuda)
     
             track_list.append({'epoch': epoch, 'loss': epoch_loss, 
                 'dev_prec': dev_prec, 'dev_rec': dev_rec, 'dev_f1': dev_f1, 'dev_loss': dev_loss, 
@@ -270,7 +269,7 @@ def main():
         else:
             patience_count += 1
             track_list.append({'epoch': epoch,'loss': epoch_loss, 'dev_prec': dev_prec, 'dev_rec': dev_rec, 'dev_f1': dev_f1, 'dev_loss': dev_loss})
-            print('epoch: {}, loss: {:.4f}, dev_f1: {:.4f}, dev_loss: {:.4f}'.format(epoch, epoch_loss, dev_f1, dev_loss))
+            print('epoch: {}, loss: {:.4f}, dev_f1: {:.4f}, dev_loss: {:.4f}, test_f1: {:.4f}'.format(epoch, epoch_loss, dev_f1, dev_loss, test_f1))
     
         print('epoch: {} in {} take: {} s'.format(epoch, args.num_epoch, time.time() - start_time))
         if patience_count >= args.patience:
