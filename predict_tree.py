@@ -47,12 +47,18 @@ def predict(trainer, data_loader, t_map, cuda=False):
             target = sample['target']
             loss = trainer.valid_step(sample)
             output_dict, pred = trainer.pred_step(sample)
+            trees = sample['tree']
+            indices = [[t.idx for t in treelist] for treelist in trees]
             if 'att_weight' in output_dict:
-                att_weight = [item.data.numpy().tolist() for item in output_dict['att_weight']]
-                
+                att_weight = [item.numpy().flatten().tolist() for item in output_dict['att_weight']]
+                # order by indices
+                att_weight = [[s for _, s in sorted(zip(i, a))] for i, a in zip(indices, att_weight)]
+                if cuda:
+                    att_weight = [item.cpu() for item in att_weight]
+            
             if cuda:
                 pred = pred.cpu() # cast back to cpu
-                att_weight = [item.cpu() for item in att_weight]
+                
             tot_loss += loss
             y_true.append(target.view(-1).numpy().tolist())
             y_pred.append(pred.view(-1).numpy().tolist())
@@ -60,8 +66,8 @@ def predict(trainer, data_loader, t_map, cuda=False):
             loss_meter.update(loss)
             pbar.set_postfix(collections.OrderedDict([
                     ('loss', '{:.4f} ({:.4f})'.format(loss, loss_meter.avg))
-                    ]))
-     
+                    ]))     
+    
     y_true = [ivt_t_map[i] for i in chain.from_iterable(y_true)]
     y_pred = [ivt_t_map[i] for i in chain.from_iterable(y_pred)]
     att_weights = list(chain.from_iterable(att_weights))
@@ -94,7 +100,7 @@ def main():
     sys.setrecursionlimit(10000)
     
     # load dataset
-    train_raw_corpus, val_raw_corpus, test_raw_corpus = utils.load_corpus(args.processed_dir)
+    train_raw_corpus, val_raw_corpus, test_raw_corpus = utils.load_corpus(args.processed_dir, ddi=False)
     assert train_raw_corpus and val_raw_corpus and test_raw_corpus, 'Corpus not found, please run preprocess.py to obtain corpus!'
     train_corpus = [(line.sent, line.type, line.p1, line.p2) for line in train_raw_corpus]
     val_corpus = [(line.sent, line.type, line.p1, line.p2) for line in val_raw_corpus]    
@@ -175,12 +181,12 @@ def main():
     with open(args.error_file, 'w') as f:
         f.write(' | '.join(['sent_id', 'e1', 'e2', 'target', 'pred']))
         f.write('\n')
-        for tup, target, pred in zip(test_raw_corpus, y_true, y_pred):
+        for tup, target, pred, att_weight in zip(test_raw_corpus, y_true, y_pred, att_weights):
             if target != pred:
                 f.write('{}\n'.format(' '.join(tup.sent)))
-                f.write('{}\n\n'.format(' | '.join([tup.sent_id, tup.e1, tup.e2, target, pred])))
+                f.write('{}\n'.format(' | '.join([tup.sent_id, tup.e1, tup.e2, target, pred])))
+                f.write('{}\n\n'.format(' '.join(map(lambda x: str(round(x, 4)), att_weight))))
     
-    '''
     # attention
     print('Writing attention scores...')
     with open(args.att_file, 'w') as f:
@@ -188,14 +194,10 @@ def main():
         f.write('\n')
         for tup, target, pred, att_weight in zip(test_raw_corpus, y_true, y_pred, att_weights):
             if target == pred and target != 'null':
-                size = len(tup.sent)
                 f.write('{}\n'.format(target))
                 f.write('{}\n'.format(' '.join(tup.sent)))
-                if args.model != 'InterAttentionLSTM':
-                    att_weight = [att_weight]
-                for i in range(len(att_weight)):
-                    f.write('{}\n'.format(' '.join(map(lambda x: str(round(x, 4)), att_weight[i][:size]))))
-    '''
+                f.write('{}\n'.format(' '.join(map(lambda x: str(round(x, 4)), att_weight))))
+    
 
 if __name__ == '__main__':
     main()
