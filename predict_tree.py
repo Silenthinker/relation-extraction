@@ -34,7 +34,7 @@ from trainer import TreeTrainer
 def predict(trainer, data_loader, t_map, cuda=False):
     y_true = []
     y_pred = []
-    att_weights = []
+    treelists = []
     
     tot_length = len(data_loader)
     tot_loss = 0
@@ -48,13 +48,19 @@ def predict(trainer, data_loader, t_map, cuda=False):
             loss = trainer.valid_step(sample)
             output_dict, pred = trainer.pred_step(sample)
             trees = sample['tree']
-            indices = [[t.idx for t in treelist] for treelist in trees]
+            
             if 'att_weight' in output_dict:
-                att_weight = [item.numpy().flatten().tolist() for item in output_dict['att_weight']]
-                # order by indices
-                att_weight = [[s for _, s in sorted(zip(i, a))] for i, a in zip(indices, att_weight)]
+                att_weights = [item.numpy().flatten().tolist() for item in output_dict['att_weight']]
+                
                 if cuda:
-                    att_weight = [item.cpu() for item in att_weight]
+                    att_weights = [item.cpu() for item in att_weights]
+                
+                # assign attention scores
+                for treelist, att_weight in zip(trees, att_weights):
+                    for t, s in zip(treelist, att_weight):
+                        t.val = s
+            
+                    treelists.append(treelist) 
             
             if cuda:
                 pred = pred.cpu() # cast back to cpu
@@ -62,17 +68,16 @@ def predict(trainer, data_loader, t_map, cuda=False):
             tot_loss += loss
             y_true.append(target.view(-1).numpy().tolist())
             y_pred.append(pred.view(-1).numpy().tolist())
-            att_weights.append(att_weight)
+
             loss_meter.update(loss)
             pbar.set_postfix(collections.OrderedDict([
                     ('loss', '{:.4f} ({:.4f})'.format(loss, loss_meter.avg))
                     ]))     
-    
+        
     y_true = [ivt_t_map[i] for i in chain.from_iterable(y_true)]
     y_pred = [ivt_t_map[i] for i in chain.from_iterable(y_pred)]
-    att_weights = list(chain.from_iterable(att_weights))
     
-    return y_true, y_pred, att_weights
+    return y_true, y_pred, treelists
 
 def main():
     parser = options.get_parser('Generator')
@@ -116,36 +121,9 @@ def main():
     # get class weights
     _, train_targets = utils.build_corpus(train_corpus, feature_map, target_map, caseless)
     class_weights = torch.Tensor(utils.get_class_weights(train_targets)) if args.class_weight else None
-    
-    # load dataset
-    def load_datasets(data_dir, dataloader=True):
-        """
-        load train, val, and test dataset
-        data_dir: dir of datasets
-        dataloader: bool, True to return pytorch Dataloader
-        """
-        # splits = ['train', 'val', 'test']
         
-        def load_dataset(split):
-            _const = 'c' if not args.childsum_tree else ''
-            split_path = os.path.join(data_dir, split + '.' + _const + 'pth')
-            split_dir = os.path.join(data_dir, split)
-            if os.path.isfile(split_path):
-                print('Found saved dataset, loading from {}'.format(split_path))
-                dataset = torch.load(split_path)
-            else:
-                print('Building dataset from scratch...')
-                dataset = ddi2013.DDI2013TreeDataset(split_dir, feature_map, args.caseless, dep=args.childsum_tree)
-                print('Save dataset to {}'.format(split_path))
-                torch.save(dataset, split_path)
-            if dataloader:
-                return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=split != 'test', collate_fn=dataset.collate, drop_last=False)
-            else:
-                return dataset
-        return load_dataset('train'), load_dataset('val'), load_dataset('test')
-        
-    
-    _, _, test_loader = load_datasets(args.processed_dir, dataloader=True)            
+    # load dataets
+    _, _, test_loader = utils.load_datasets(args.processed_dir, args.train_size, args, feature_map, dataloader=True)          
     
     # build model
     vocab_size = len(feature_map)
@@ -165,7 +143,12 @@ def main():
     trainer = TreeTrainer(args, model, criterion)
     
     # predict
-    y_true, y_pred, att_weights = predict(trainer, test_loader, target_map, cuda=args.cuda)
+    y_true, y_pred, treelists = predict(trainer, test_loader, target_map, cuda=args.cuda)
+    
+    # assign words to roots
+    for tup, treelist in zip(test_raw_corpus, treelists):
+        for t in treelist:
+            t.idx = tup.sent[t.idx] if t.idx < len(tup.sent) else None            
     
     # prediction
     print('Predicting...')
@@ -176,27 +159,28 @@ def main():
             f.write('|'.join([tup.sent_id, tup.e1, tup.e2, str(ddi), pred]))
             f.write('\n')
 
+    def print_info(f, tup, target, pred, root):
+        f.write('{}\n'.format(' '.join(tup.sent)))
+        f.write('{}\n'.format(' | '.join([tup.sent_id, tup.e1, tup.e2, target, pred])))
+        f.write('{}\n'.format(root))
+    
     # error analysis
     print('Analyzing...')
     with open(args.error_file, 'w') as f:
         f.write(' | '.join(['sent_id', 'e1', 'e2', 'target', 'pred']))
         f.write('\n')
-        for tup, target, pred, att_weight in zip(test_raw_corpus, y_true, y_pred, att_weights):
+        for tup, target, pred, treelist in zip(test_raw_corpus, y_true, y_pred, treelists):
             if target != pred:
-                f.write('{}\n'.format(' '.join(tup.sent)))
-                f.write('{}\n'.format(' | '.join([tup.sent_id, tup.e1, tup.e2, target, pred])))
-                f.write('{}\n\n'.format(' '.join(map(lambda x: str(round(x, 4)), att_weight))))
+                print_info(f, tup, target, pred, treelist[-1])
     
     # attention
     print('Writing attention scores...')
-    with open(args.att_file, 'w') as f:
+    with open(args.correct_file, 'w') as f:
         f.write(' | '.join(['target', 'sent', 'att_weight']))
         f.write('\n')
-        for tup, target, pred, att_weight in zip(test_raw_corpus, y_true, y_pred, att_weights):
+        for tup, target, pred, treelist in zip(test_raw_corpus, y_true, y_pred, treelists):
             if target == pred and target != 'null':
-                f.write('{}\n'.format(target))
-                f.write('{}\n'.format(' '.join(tup.sent)))
-                f.write('{}\n'.format(' '.join(map(lambda x: str(round(x, 4)), att_weight))))
+                print_info(f, tup, target, pred, treelist[-1])
     
 
 if __name__ == '__main__':

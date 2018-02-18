@@ -5,12 +5,13 @@ Tree object
 Note: is not designed for dynamic construction of tree
 """
 class Tree(object):
-    __slots__ = ['parent', 'children', 'state', 'idx']
+    __slots__ = ['parent', 'children', 'state', 'idx', 'val']
     def __init__(self):
         self.parent = None
         self.children = []
         self.state = None
         self.idx = None
+        self.val = -1
 
     def add_child(self, child):
         child.parent = self
@@ -37,6 +38,31 @@ class Tree(object):
     @property
     def num_children(self):
         return len(self.children)
+    
+    def __repr__(self):
+        def _update_node_idx(node):
+
+            if node.idx is None:
+                ret = []
+                for c in node.children:
+                    ret.append(_update_node_idx(c))
+
+                node.idx = ' '.join(ret)
+
+            return node.idx
+
+        def _repr_node(node, level, indent='\t'):
+            ret = []
+            ret.append('{} ({})'.format(indent * level + str(node.idx), str(node.val)))
+            for c in node.children:
+                ret.extend(_repr_node(c, level + 1))
+
+            return ret
+        
+        _update_node_idx(self)
+        ret = _repr_node(self, 0)
+        
+        return '\n'.join(ret)
 
 '''
 class BinaryTree:
