@@ -98,6 +98,8 @@ def main():
     
     args.cuda = not args.disable_cuda and torch.cuda.is_available()
     
+    print(args)
+    
     if args.cuda:
         torch.backends.cudnn.benchmark = True
     
@@ -162,7 +164,7 @@ def main():
     def print_info(f, tup, target, pred, root):
         f.write('{}\n'.format(' '.join(tup.sent)))
         f.write('{}\n'.format(' | '.join([tup.sent_id, tup.e1, tup.e2, target, pred])))
-        f.write('{}\n'.format(root))
+        f.write('{}\n\n'.format(root))
     
     # error analysis
     print('Analyzing...')
