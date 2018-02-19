@@ -44,6 +44,8 @@ def add_preprocessing_args(parser):
                        help='parse with constituency parser')
     group.add_argument('--dep', action='store_true',
                        help='parse with dependency parser')
+    group.add_argument('--sp', action='store_true',
+                       help='use shortest path')
     
     return group
 

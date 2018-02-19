@@ -97,7 +97,7 @@ def load_datasets(data_dir, train_size, args, feature_map, dataloader=True):
             dataset = torch.load(split_path)
         else:
             print('Building dataset from scratch...')
-            dataset = ddi2013.DDI2013TreeDataset(feature_map, args.caseless, dep=args.childsum_tree, path=split_dir, )
+            dataset = ddi2013.DDI2013TreeDataset(feature_map, args.caseless, sp=args.sp, dep=args.childsum_tree, path=split_dir, )
             print('Save dataset to {}'.format(split_path))
             torch.save(dataset, split_path)
         if dataloader:

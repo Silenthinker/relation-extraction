@@ -260,6 +260,22 @@ def levelOrder(root):
     ret.reverse()
     return ret
 
+def lca(root, p, q):
+    """
+    Find lowest common ancestor of node p and q given root
+    """
+    if root == p or root == q:
+        return root
+    if not root.children: # unequal to p or q and is node
+        return None
+    trees = [t for t in [lca(c, p, q) for c in root.children] if t is not None]
+    if len(trees) == 1:
+        return trees[0]
+    elif len(trees) == 2:
+        return root
+    else:
+        return None
+    
 class DDI2013SeqDataset(Dataset):
     """
     Dataset Class for relation extraction, and sequence model
@@ -300,7 +316,11 @@ class DDI2013SeqDataset(Dataset):
         return res
 
 class DDI2013TreeDataset(Dataset):
-    def __init__(self, mapping, caseless, path=None, dep=True, data=None):
+    def __init__(self, mapping, caseless, sp=False, path=None, dep=True, data=None):
+        """
+        Args:
+            sp: shortest path
+        """
         super().__init__()
         
         assert path is not None or (data is not None), 'Either path or data should be provided.'
@@ -308,12 +328,15 @@ class DDI2013TreeDataset(Dataset):
         self.mapping = mapping
         self.caseless = caseless
         self.dep = dep
+        self.sp = sp
+        self.d1, self.d2 = self.mapping['drug1'], self.mapping['drug2']
         
         if path is not None:
             _const = '' if dep else 'c'
             sentences = self.read_sentences(os.path.join(path, 'sent.' + _const + 'toks'))
+            trees = self.read_trees(os.path.join(path, 'sent.' + _const + 'parents')) # [root]
+            self.trees = self.build_trees(trees, sentences)
             self.sentences = self.build_features(sentences) # [tensor]
-            self.trees = self.read_trees(os.path.join(path, 'sent.' + _const + 'parents')) # [Tree]
             self.labels = self.read_labels(os.path.join(path, 'other.txt')) # [tensor]
             positions = self.build_positions(sentences)
             self.positions = self.build_features(positions) # tensor
@@ -383,7 +406,7 @@ class DDI2013TreeDataset(Dataset):
         Return:
             [[int]], concatenated position indices
         """
-        d1, d2 = self.mapping['drug1'], self.mapping['drug2']
+        d1, d2 = self.d1, self.d2
         positions = []
         # ensure there is a pair of mentions
         for sent in sentences:
@@ -419,9 +442,9 @@ class DDI2013TreeDataset(Dataset):
 
     def read_tree(self, line):
         """
-        Parse tree and return level order traversal of tree
+        Parse tree
         Return:
-            [Tree]
+            Tree
         """
         parents = list(map(int, line.split()))
         # sanity check
@@ -451,9 +474,33 @@ class DDI2013TreeDataset(Dataset):
                         prev = tree
                         idx = parent
 
-        levelTraversal = levelOrder(root)
-        return levelTraversal
-    
+        return root
+
+    def build_trees(self, trees, sentences):
+        """
+        Return level order traversal of root or LCA of entity mentions
+        """
+        d1, d2 = self.d1, self.d2
+        ret_trees = []
+        for r, s in tqdm(zip(trees, sentences)):
+            levelOrderTraversal = levelOrder(r)
+            if self.sp:
+                # find nodes containing entity mentions
+                p = q = None
+                p_idx, q_idx = s.index(d1), s.index(d2)
+                for n in levelOrderTraversal:
+                    if n.idx == p_idx:
+                        p = n
+                    if n.idx == q_idx:
+                        q = n
+                    if p is not None and q is not None:
+                        break
+                lca_node = lca(r, p, q)
+                levelOrderTraversal = levelOrder(lca_node)
+            ret_trees.append(levelOrderTraversal)
+        
+        return ret_trees
+        
     def read_labels(self, filename):
         """
         sent_id pair_id e1 e2 ddi type p1 p2
