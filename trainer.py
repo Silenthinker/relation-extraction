@@ -209,6 +209,7 @@ class TreeTrainer(BasicTrainer):
         for tree in self._sample['tree']:
             for node in tree:
                 node.state = None
+                node.val = None
         
     def valid_step(self, sample):
         # prepare sample

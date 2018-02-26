@@ -36,6 +36,93 @@ class IntraAttention(nn.Module):
         return att_weight
 '''
 
+class StructuralAttention(nn.Module):
+    def __init__(self, in_dim):
+        super().__init__()
+        self.w = nn.Linear(in_dim, 1, bias=False)
+        
+        self.reg_params = [self.w]
+    
+    def rand_init(self):
+        utils.init_linear(self.w)
+        
+    def forward(self, tree, inputs):
+        """
+        Args:
+            tree: [Tree]
+            inputs: [N, in_dim]
+        Return:
+            weight of input: [N, 1]
+            attentional states: Tensor[N, dim]
+        """
+        out = self.w(F.tanh(inputs)) # [N, 1]
+        out = torch.exp(out) # exponential
+        root = tree[-1]
+        for i, node in enumerate(tree):
+            node.val = out[i]
+        root.val.data.fill_(1) # root node always has score equal to 1
+        
+        # renormalize scores
+        def _renormalize(root):
+            if root.num_children == 2:
+                sum_score = root.children[0].val + root.children[1].val + 1e-10
+                multiplier = 1 / sum_score * root.val
+                for c in root.children:
+                    c.val = c.val * multiplier
+                    _renormalize(c)
+            elif root.num_children == 1:
+                c = root.children[0]
+                c.val = root.val
+                _renormalize(c)
+            elif root.num_children == 0:
+                return
+        
+        _renormalize(root)
+        
+        # compute attentional hidden states
+        
+        for node in tree:
+            if node.num_children == 2:
+                left_c, left_h = node.children[0].state
+                right_c, right_h = node.children[1].state
+                left_s = node.children[0].val
+                right_s = node.children[1].val   
+                node.state = (left_c * left_s + right_c * right_s, left_h * left_s + right_h * right_s)
+    
+        att_scores = torch.stack([node.val for node in tree], dim=0)   
+        return att_scores, [node.state for node in tree]
+
+class InterAttention(nn.Module):
+    """
+    attention to hidden state guided by relation embedding
+    """
+    def __init__(self, dim):
+        super().__init__()
+        self.W = nn.Linear(dim, dim, bias=False)
+        
+        self.reg_params = [self.W]
+    
+    def rand_init(self):
+        utils.init_linear(self.W)
+        
+    def forward(self, input_1, input_2):
+        """
+        Args:
+            input_1: [seq_length, hidden_dim]
+            input_2: [hidden_dim, tagset_size]
+        Returns:
+            out: [seq_length, tag_size]
+        """
+        
+        # H W E
+        out = self.W(input_1) # [seq_length, hidden_dim]
+        out = torch.mm(input_1, input_2) # [seq_length, tag_size]
+        
+        
+        out = F.softmax(out, dim=0)
+        
+        return out
+    
 class IntraAttention(nn.Module):
     """
     self-attention: 1-layer MLP
@@ -82,6 +169,7 @@ class TreeRNNBase(nn.Module):
     def forward(self, tree, inputs):
         raise NotImplementedError
         
+
 class BinaryTreeGRU(TreeRNNBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -176,7 +264,8 @@ class ChildSumTreeLSTM(TreeRNNBase):
         self.fx = nn.Linear(self.in_dim, self.mem_dim, bias=True) # responsible for bias
         self.fh = nn.Linear(self.mem_dim, self.mem_dim, bias=False)
         
-        self.reg_params = [self.ioux, self.iouh, self.fx, self.fh]
+        # self.reg_params = [self.ioux, self.iouh, self.fx, self.fh]
+        self.reg_params = []
 
     def rand_init(self):
         """
@@ -237,7 +326,8 @@ class BinaryTreeLSTM(TreeRNNBase):
         self.iouh = nn.Linear(self.bf * self.mem_dim, self.mem_dim * 3, bias=False)
         self.fh = nn.Linear(self.bf * self.mem_dim, self.bf * self.mem_dim, bias=False)
         
-        self.reg_params = [self.fioux, self.iouh, self.fh]
+        # self.reg_params = [self.fioux, self.iouh, self.fh]
+        self.reg_params = []
     
     def rand_init(self):
         # initialize weight
@@ -327,6 +417,7 @@ class RelationTreeModel(nn.Module):
         self.hidden_dim = args.hidden_dim
         self.tagset_size = tagset_size
         self.word_embeds = nn.Embedding(vocab_size, self.embedding_dim)
+        self.relation_embeds = nn.Parameter(torch.Tensor(self.hidden_dim, self.tagset_size)) 
         
         if self.position:
             self.position_embeds = nn.Embedding(self.position_size, self.position_dim)
@@ -344,7 +435,8 @@ class RelationTreeModel(nn.Module):
         
         # attention
         if self.enable_att:
-            self.attention = IntraAttention(self.hidden_dim)
+            # self.attention = IntraAttention(self.hidden_dim)
+            self.attention = InterAttention(self.hidden_dim)
             
         self.linear = nn.Linear(self.hidden_dim, self.tagset_size)
         self.dropout1 = nn.Dropout(p=self.dropout_ratio)
@@ -386,7 +478,8 @@ class RelationTreeModel(nn.Module):
             
         if self.enable_att:
             self.attention.rand_init()
-            
+        
+        utils.init_embedding(self.relation_embeds)
         # initialize tree
         self.treernn.rand_init()
         
@@ -413,8 +506,14 @@ class RelationTreeModel(nn.Module):
         
         if self.enable_att:
             hiddens = torch.cat(hiddens, dim=0) # [N, hidden_dim]
-            att_weight = self.attention(hiddens).view(1, -1) # [1, N]
-            sent_rep = torch.mm(att_weight, hiddens) # [1, hidden_dim]
+            # att_weight = self.attention(hiddens).view(1, -1) # [1, N]
+            # att_weight, att_states = self.attention(tree, hiddens)
+            # att_weight = att_weight.view(1, -1) # [1, N]
+            # att_hiddens = [state[idx] for state in att_states]
+            # sent_rep = torch.mm(att_weight, hiddens) # [1, hidden_dim]
+            # sent_rep = 0.5 * (hiddens[-1] + att_hiddens[-1])
+            att_weight = self.attention(hiddens, self.relation_embeds) # [N, tag_size]
+            sent_rep, _ = torch.max(torch.mm(att_weight.transpose(0, 1), hiddens), dim=0, keepdim=True) # [1, hidden_dim]
             output_dict['att_weight'] = att_weight
         else:
             sent_rep = hiddens[-1]
