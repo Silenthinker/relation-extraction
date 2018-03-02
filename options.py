@@ -116,6 +116,8 @@ def add_model_args(parser):
                        help='use (self) attention; only applicable to tree model')
     group.add_argument('--use_cell', action='store_true',
                        help='use cell instead of hidden state for lstm model')
+    group.add_argument('--bottom_lstm', action='store_true',
+                       help='build hierarchical model')
     
     return group
 

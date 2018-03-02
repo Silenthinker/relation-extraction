@@ -316,6 +316,7 @@ class RelationTreeModel(nn.Module):
         super().__init__()
         self.args = args
         self.enable_att = args.attention
+        self.bottom_lstm = args.bottom_lstm
         self.use_cell = args.use_cell
         self.dropout_ratio = args.dropout_ratio
         self.embedding_dim = args.embedding_dim
@@ -333,14 +334,22 @@ class RelationTreeModel(nn.Module):
         
         in_dim = self.embedding_dim + 2*self.position_dim
         
+        tree_in_dim = in_dim
+        # optional bottom lstm
+        if self.bottom_lstm:
+            self.lstm = nn.LSTM(in_dim, self.hidden_dim // 2,
+                                num_layers=1, bidirectional=True, bias=True,
+                                dropout=self.dropout_ratio, batch_first=True)
+            tree_in_dim = self.hidden_dim
+        
         # build tree model
         if args.childsum_tree:
-            self.treernn = ChildSumTreeLSTM(in_dim, self.hidden_dim, dropout=self.dropout_ratio)
+            self.treernn = ChildSumTreeLSTM(tree_in_dim, self.hidden_dim, dropout=self.dropout_ratio)
         else:
             if args.gru:
-                self.treernn = BinaryTreeGRU(in_dim, self.hidden_dim, dropout=self.dropout_ratio)
+                self.treernn = BinaryTreeGRU(tree_in_dim, self.hidden_dim, dropout=self.dropout_ratio)
             else:
-                self.treernn = BinaryTreeLSTM(in_dim, self.hidden_dim, dropout=self.dropout_ratio)
+                self.treernn = BinaryTreeLSTM(tree_in_dim, self.hidden_dim, dropout=self.dropout_ratio)
         
         # attention
         if self.enable_att:
@@ -352,6 +361,7 @@ class RelationTreeModel(nn.Module):
         self.reg_params = [self.linear] + self.treernn.reg_params
         if self.enable_att:
             self.reg_params += self.attention.reg_params
+            
       
     @property
     def reg_params(self):
@@ -383,6 +393,9 @@ class RelationTreeModel(nn.Module):
             
         if self.position:
             utils.init_embedding(self.position_embeds.weight)
+        
+        if self.bottom_lstm:
+            utils.init_lstm(self.lstm)
             
         if self.enable_att:
             self.attention.rand_init()
@@ -406,8 +419,15 @@ class RelationTreeModel(nn.Module):
             position_emb = torch.cat(torch.split(position_emb, position_emb.size(0) // 2, dim=0), dim=1)
 #            position_emb = torch.cat([position_emb[0:position_emb.size(0)//2], position_emb[position_emb.size(0)//2:]], dim=1)
             inputs_emb = torch.cat([inputs_emb, position_emb], dim=1)
+        
+        if self.bottom_lstm:
+            inputs_emb.unsqueeze_(0) # batch first
+            bottom_states, _ = self.lstm(inputs_emb) # [1, N, hidden_dim]
+            bottom_states.squeeze_(0) # [N, hidden_dim]
+        else:
+            bottom_states = inputs_emb
             
-        states = self.treernn(tree, inputs_emb)
+        states = self.treernn(tree, bottom_states)
         idx = 0 if self.use_cell else 1 # use cell or hidden states
         hiddens = [state[idx] for state in states]
         
