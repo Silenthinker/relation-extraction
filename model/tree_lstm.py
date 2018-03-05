@@ -40,10 +40,10 @@ class IntraAttention(nn.Module):
     """
     self-attention: 1-layer MLP
     """
-    def __init__(self, in_dim):
+    def __init__(self, in_dim, dropout_ratio):
         super().__init__()
         self.w = nn.Linear(in_dim, 1, bias=False)
-        self.dropout = nn.Dropout()
+        self.dropout = nn.Dropout(dropout_ratio)
         
         self.reg_params = [self.w]
      
@@ -63,15 +63,16 @@ class IntraAttention(nn.Module):
         return att_weight    
     
 class TreeRNNBase(nn.Module):
-    def __init__(self, in_dim, mem_dim, dropout=0):
+    def __init__(self, in_dim, mem_dim, f_dropout=None, r_dropout=None):
         super().__init__()
         
         self.in_dim = in_dim
         self.mem_dim = mem_dim
-        self.dropout_ratio = dropout
+        self.f_dropout_ratio = f_dropout
+        self.r_dropout_ratio = r_dropout
         
-        self.forward_dropout = nn.Dropout(p=self.dropout_ratio)
-        self.semeniuta_dropout = nn.Dropout(p=self.dropout_ratio)
+        self.forward_dropout = nn.Dropout(p=self.f_dropout_ratio)
+        self.semeniuta_dropout = nn.Dropout(p=self.r_dropout_ratio)
     
     def rand_init(self):
         raise NotImplementedError
@@ -317,7 +318,10 @@ class RelationTreeModel(nn.Module):
         self.args = args
         self.enable_att = args.attention
         self.use_cell = args.use_cell
+        # dropout rate
         self.dropout_ratio = args.dropout_ratio
+        self.f_dropout_ratio = args.f_dropout_ratio if args.f_dropout_ratio is not None else self.dropout_ratio
+        self.r_dropout_ratio = args.r_dropout_ratio  if args.r_dropout_ratio is not None else self.dropout_ratio
         self.embedding_dim = args.embedding_dim
         self.att_dim = args.att_hidden_dim
         self.position = args.position
@@ -335,16 +339,16 @@ class RelationTreeModel(nn.Module):
         
         # build tree model
         if args.childsum_tree:
-            self.treernn = ChildSumTreeLSTM(in_dim, self.hidden_dim, dropout=self.dropout_ratio)
+            self.treernn = ChildSumTreeLSTM(in_dim, self.hidden_dim, r_dropout=self.r_dropout_ratio, f_dropout=self.f_dropout_ratio)
         else:
             if args.gru:
-                self.treernn = BinaryTreeGRU(in_dim, self.hidden_dim, dropout=self.dropout_ratio)
+                self.treernn = BinaryTreeGRU(in_dim, self.hidden_dim, r_dropout=self.r_dropout_ratio, f_dropout=self.f_dropout_ratio)
             else:
-                self.treernn = BinaryTreeLSTM(in_dim, self.hidden_dim, dropout=self.dropout_ratio)
+                self.treernn = BinaryTreeLSTM(in_dim, self.hidden_dim, r_dropout=self.r_dropout_ratio, f_dropout=self.f_dropout_ratio)
         
         # attention
         if self.enable_att:
-            self.attention = IntraAttention(self.hidden_dim)
+            self.attention = IntraAttention(self.hidden_dim, self.dropout_ratio)
             
         self.linear = nn.Linear(self.hidden_dim, self.tagset_size)
         self.dropout1 = nn.Dropout(p=self.dropout_ratio)

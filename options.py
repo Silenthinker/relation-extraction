@@ -98,6 +98,10 @@ def add_model_args(parser):
                        help='number of rnn layers')
     group.add_argument('--dropout_ratio', type=float, default=0.4, 
                        help='dropout ratio')
+    group.add_argument('--f_dropout_ratio', type=float, default=0.4, 
+                       help='forward dropout ratio')
+    group.add_argument('--r_dropout_ratio', type=float, default=0.4, 
+                       help='recurrent dropout ratio')
     group.add_argument('--rand_embedding', action='store_true', 
                        help='use randomly initialized word embeddings')
     group.add_argument('--att_hidden_dim', type=int, default=100, 
