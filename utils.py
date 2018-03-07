@@ -479,3 +479,32 @@ def distance(x, y):
     
     return dist
 
+def analyze_f1_by_length(pred_tup, t_map):
+    # sort by length
+    pred_tup = sorted(pred_tup, key=lambda x: x[2])
+    pred_buckets = []
+    bucket = []
+    interval = [30, 60, 100]
+    i = 0
+    for tup in pred_tup:
+        if tup[2] > interval[i]:
+            pred_buckets.append((interval[i], bucket))
+            i += 1
+            bucket = [] 
+        bucket.append(tup)
+        if i >= len(interval):
+            break
+    
+    ivt_t_map = {v:k for k, v in t_map.items()}
+    labels = [k for k,v in ivt_t_map.items() if v != 'null']
+    t_names = [ivt_t_map[l] for l in labels]
+    f1_by_len = []
+    for bucket in pred_buckets:
+        l, bucket = bucket
+        if len(bucket) == 0:
+            print('Length {} does not have instances'.format(l))
+        _y_true = [item[0] for item in bucket]
+        _y_pred = [item[1] for item in bucket]
+        prec, rec, f1 = evaluate(_y_true, _y_pred, labels=labels, target_names=t_names)  
+        f1_by_len.append((l, f1))
+    return f1_by_len
