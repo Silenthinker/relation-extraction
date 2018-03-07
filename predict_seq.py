@@ -21,7 +21,7 @@ import torch.optim as optim
 
 import utils
 import options
-from trainer import Trainer
+from trainer import SeqTrainer
 from model.lstm import LSTM
 from model.attention_lstm import AttentionPoolingLSTM
 
@@ -31,6 +31,7 @@ def predict(trainer, data_loader, t_map, cuda=False):
     y_pred = []
     att_weights = []
     indices = []
+    lens = []
     for sample in tqdm(chain.from_iterable(data_loader)):
         target = sample['target']
         idx = sample['index']
@@ -42,10 +43,16 @@ def predict(trainer, data_loader, t_map, cuda=False):
         y_true.append(target.numpy().flatten().tolist())
         y_pred.append(pred.numpy().tolist())
         indices.append(idx.numpy().tolist())
+        lens.append([len(item) for item in sample['feature']])
         att_weights.append(att_weight.numpy().tolist())
     
-    y_true = chain.from_iterable(y_true)
-    y_pred = chain.from_iterable(y_pred)
+    y_true = list(chain.from_iterable(y_true))
+    y_pred = list(chain.from_iterable(y_pred))
+    lens = list(chain.from_iterable(lens))
+    pred_tup = list(zip(y_true, y_pred, lens))
+    
+    f1_by_len = utils.analyze_f1_by_length(pred_tup, t_map)
+    print(f1_by_len)
     indices = list(chain.from_iterable(indices))
     att_weights = chain.from_iterable(att_weights)
     y_true = [y for _, y in sorted(zip(indices, [ivt_t_map[i] for i in y_true]))]
@@ -80,9 +87,7 @@ def main():
         print('No checkpoint file found: {}'.format(args.load_checkpoint))
         raise OSError
         
-    _, test_raw_corpus = utils.load_corpus(args.train_path, args.test_path)
-    if not test_raw_corpus:
-        test_raw_corpus = utils.preprocess_ddi(data_path=args.test_corpus_path, output_path=args.test_path, position=True)
+    train_raw_corpus, val_raw_corpus, test_raw_corpus = utils.load_corpus(args.processed_dir, ddi=True)
     test_corpus = [(line.sent, line.type, line.p1, line.p2) for line in test_raw_corpus]
     
     # preprocessing
@@ -104,7 +109,7 @@ def main():
     model.load_state_dict(checkpoint_file['state_dict'])
     
     # trainer
-    trainer = Trainer(args, model, criterion)
+    trainer = SeqTrainer(args, model, criterion)
     
     if args.cuda:
         model.cuda()

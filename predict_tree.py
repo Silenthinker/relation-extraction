@@ -17,6 +17,8 @@ from collections import namedtuple
 from itertools import chain
 
 import numpy as np
+import matplotlib
+import matplotlib.pyplot as plt
 
 import torch
 import torch.autograd as autograd
@@ -34,6 +36,7 @@ from trainer import TreeTrainer
 def predict(trainer, data_loader, t_map, cuda=False):
     y_true = []
     y_pred = []
+    lens = []
     treelists = []
     
     tot_length = len(data_loader)
@@ -68,16 +71,25 @@ def predict(trainer, data_loader, t_map, cuda=False):
             tot_loss += loss
             y_true.append(target.view(-1).numpy().tolist())
             y_pred.append(pred.view(-1).numpy().tolist())
+            lens.append([len(s) for s in sample['feature']])
 
             loss_meter.update(loss)
             pbar.set_postfix(collections.OrderedDict([
                     ('loss', '{:.4f} ({:.4f})'.format(loss, loss_meter.avg))
-                    ]))     
-        
-    y_true = [ivt_t_map[i] for i in chain.from_iterable(y_true)]
-    y_pred = [ivt_t_map[i] for i in chain.from_iterable(y_pred)]
+                    ]))    
     
-    return y_true, y_pred, treelists
+    y_true = list(chain.from_iterable(y_true))
+    y_pred = list(chain.from_iterable(y_pred))
+    lens = list(chain.from_iterable(lens))
+    y_true_label = [ivt_t_map[i] for i in y_true]
+    y_pred_label = [ivt_t_map[i] for i in y_pred]
+    
+    pred_tup = list(zip(y_true, y_pred, lens))
+    
+    f1_by_len = utils.analyze_f1_by_length(pred_tup, t_map)
+    print(f1_by_len)
+    return y_true_label, y_pred_label, treelists, f1_by_len
+
 
 def main():
     parser = options.get_parser('Generator')
@@ -145,8 +157,8 @@ def main():
     trainer = TreeTrainer(args, model, criterion)
     
     # predict
-    y_true, y_pred, treelists = predict(trainer, test_loader, target_map, cuda=args.cuda)
-    
+    y_true, y_pred, treelists, f1_by_len = predict(trainer, test_loader, target_map, cuda=args.cuda)
+
     # assign words to roots
     for tup, treelist in zip(test_raw_corpus, treelists):
         for t in treelist:
