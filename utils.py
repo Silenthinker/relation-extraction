@@ -407,20 +407,10 @@ def softmax(input, mask=None, dim=1):
     mask: [d0, 1, 1, d_dim, ..., 1]
     """
     
-    input_size = input.size()
-    
     if mask is not None:
-        input.masked_fill_(mask, -float('inf'))
+        input.masked_fill_(mask, -1e12)
     
-    trans_input = input.transpose(dim, len(input_size)-1)
-    trans_size = trans_input.size()
-
-    input_2d = trans_input.contiguous().view(-1, trans_size[-1]) # [..., d_dim]
-    
-    soft_max_2d = F.softmax(input_2d)
-    
-    soft_max_nd = soft_max_2d.view(*trans_size)
-    return soft_max_nd.transpose(dim, len(input_size)-1)
+    return F.softmax(input, dim=dim)
 
 def make_variable(tensor, cuda=False, volatile=False, requires_grad=False):
     if cuda:
