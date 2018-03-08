@@ -484,7 +484,7 @@ def analyze_f1_by_length(pred_tup, t_map):
     pred_tup = sorted(pred_tup, key=lambda x: x[2])
     pred_buckets = []
     bucket = []
-    interval = [30, 60, 100]
+    interval = [30, 100]
     i = 0
     for tup in pred_tup:
         if tup[2] > interval[i]:
