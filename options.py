@@ -15,6 +15,8 @@ def get_parser(desc):
                         help='Do not use gpu resources')
     parser.add_argument('--num-processes', type=int, default=2, metavar='N',
                         help='how many training processes to use (default: 2)')
+    parser.add_argument('--seed', type=int, default=5,
+                         help='seed for random generator')
     
     return parser
 
