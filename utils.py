@@ -113,7 +113,11 @@ def load_datasets(data_dir, train_size, args, feature_map, dataloader=True):
     trees = train.trees + val.trees
     labels = torch.cat([train.labels, val.labels], dim=0)
     
-    train_features, train_targets, val_features, val_targets = stratified_shuffle_split(list(zip(sentences, positions, trees)), labels.numpy().tolist(), train_size=train_size)
+    train_features, train_targets, val_features, val_targets = stratified_shuffle_split(
+            list(zip(sentences, positions, trees)), 
+            labels.numpy().tolist(), 
+            train_size=train_size,
+            random_state=args.seed)
     train_targets, val_targets = torch.LongTensor(train_targets),  torch.LongTensor(val_targets)
     train_data, val_data = list(zip(*train_features)), list(zip(*val_features))
     train_data.append(train_targets)
@@ -148,7 +152,7 @@ def build_corpus(raw_corpus, feature_mapping, target_mapping, caseless):
     targets = map_iterable(raw_targets, target_mapping)
     return features, targets    
     
-def stratified_shuffle_split(features, targets, train_size=0.9):
+def stratified_shuffle_split(features, targets, train_size=0.9, random_state=None):
     """
     Args:
         inputs: list
@@ -164,7 +168,7 @@ def stratified_shuffle_split(features, targets, train_size=0.9):
 
     X = np.arange(len(targets)) # serve as indices    
     y = np.array(targets)    
-    train_index, val_index, _, _ = train_test_split(X, y, train_size=train_size, random_state=5)
+    train_index, val_index, _, _ = train_test_split(X, y, train_size=train_size, random_state=random_state)
     
     # split features
     train_features = []
